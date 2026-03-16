@@ -1,50 +1,79 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { LayoutDashboard, Settings as SettingsIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
+import { Dashboard } from "@/pages/Dashboard";
+import { Settings } from "@/pages/Settings";
+
+type TabId = "dashboard" | "settings";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const { t, i18n } = useTranslation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const links = [
+    {
+      label: t("menu.dashboard"),
+      id: "dashboard" as const,
+      icon: (
+        <LayoutDashboard className="text-neutral-700 dark:text-neutral-200 h-5 w-5 flex-shrink-0" />
+      ),
+    },
+    {
+      label: t("menu.settings"),
+      id: "settings" as const,
+      icon: (
+        <SettingsIcon className="text-neutral-700 dark:text-neutral-200 h-5 w-5 flex-shrink-0" />
+      ),
+    },
+  ];
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="h-screen w-screen bg-gray-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50">
+      <div className="flex h-full max-w-7xl mx-auto">
+        <Sidebar
+          open={sidebarOpen}
+          setOpen={setSidebarOpen}
+          activeId={activeTab}
+          setActiveId={(id) => setActiveTab(id as TabId)}
+        >
+          <SidebarBody className="justify-between gap-8">
+            <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+              <div className="flex items-center gap-2 px-1 py-1">
+                <div className="h-6 w-6 rounded-lg bg-black dark:bg-white" />
+                <span className="text-sm font-semibold">{t("appName")}</span>
+                <div className="ml-auto flex gap-1">
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-100"
+                    onClick={() => void i18n.changeLanguage("zh-CN")}
+                  >
+                    中
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-100"
+                    onClick={() => void i18n.changeLanguage("en")}
+                  >
+                    EN
+                  </button>
+                </div>
+              </div>
+              <div className="mt-6 flex flex-col gap-1">
+                {links.map((link) => (
+                  <SidebarLink key={link.id} item={link} />
+                ))}
+              </div>
+            </div>
+          </SidebarBody>
+        </Sidebar>
+        <main className="flex-1 flex">
+          {activeTab === "dashboard" && <Dashboard />}
+          {activeTab === "settings" && <Settings />}
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 
