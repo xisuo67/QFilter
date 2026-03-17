@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { useToasts } from "@/components/ui/toast";
 
 interface ModelConfig {
   api_url: string;
@@ -10,13 +11,13 @@ interface ModelConfig {
 
 export function Settings() {
   const { t } = useTranslation();
+  const { success, error } = useToasts();
   const [form, setForm] = useState<ModelConfig>({
     api_url: "",
     model_name: "",
     api_key: "",
   });
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -26,30 +27,30 @@ export function Settings() {
         )) as ModelConfig | null;
         if (existing) {
           setForm(existing);
+          success(t("settings.loadSuccess", "已加载上次保存的配置"));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("load_model_config error", error);
+        error(
+          t("settings.loadError", "加载本地配置失败，请稍后重试。"),
+        );
       }
     })();
-  }, []);
+  }, [t, success, error]);
 
-  const handleChange = (
-    field: keyof ModelConfig,
-    value: string,
-  ) => {
+  const handleChange = (field: keyof ModelConfig, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    setMessage(null);
     try {
       await invoke("save_model_config", { config: form });
-      setMessage(t("settings.saveSuccess", "已保存到本地"));
-    } catch (error) {
+      success(t("settings.saveSuccess", "保存成功"));
+    } catch (error: any) {
       console.error("save_model_config error", error);
-      setMessage(t("settings.saveError", "保存失败，请稍后重试"));
+      error(t("settings.saveError", "保存失败，请稍后重试"));
     } finally {
       setSaving(false);
     }
@@ -123,11 +124,6 @@ export function Settings() {
                 ? t("settings.saving", "保存中…")
                 : t("settings.save", "保存")}
             </button>
-            {message && (
-              <span className="text-xs text-neutral-600 dark:text-neutral-300">
-                {message}
-              </span>
-            )}
           </div>
         </form>
       </div>
