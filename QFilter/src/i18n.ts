@@ -14,12 +14,12 @@ void i18n
         translation: {
           appName: "QFilter",
           menu: {
-            dashboard: "仪表盘",
+            dashboard: "快筛",
             settings: "设置",
           },
           dashboard: {
-            title: "仪表盘",
-            intro: "在这里你可以拖动二维码到指定位置进行识别过滤",
+            title: "快筛",
+            intro: "群二维码快速筛选器",
           },
           settings: {
             title: "设置",
