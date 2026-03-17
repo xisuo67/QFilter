@@ -9,22 +9,19 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+} from "@/components/data-table/table";
+// import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+// import { Badge } from "@/components/ui/badge";
 import { ExternalLink } from "lucide-react";
 
+// --- TYPE DEFINITIONS ---
 interface Contributor {
   src: string;
   alt: string;
   fallback: string;
 }
 
-export type StatusVariant = "active" | "inProgress" | "onHold";
+type StatusVariant = "active" | "inProgress" | "onHold";
 
 export interface Project {
   id: string;
@@ -40,11 +37,13 @@ export interface Project {
   };
 }
 
+// --- PROPS INTERFACE ---
 interface ProjectDataTableProps {
   projects: Project[];
   visibleColumns: Set<keyof Project>;
 }
 
+// --- STATUS BADGE VARIANTS ---
 const badgeVariants = cva("capitalize text-white", {
   variants: {
     variant: {
@@ -58,10 +57,9 @@ const badgeVariants = cva("capitalize text-white", {
   },
 });
 
-export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
-  projects,
-  visibleColumns,
-}) => {
+// --- MAIN COMPONENT ---
+export const ProjectDataTable = ({ projects, visibleColumns }: ProjectDataTableProps) => {
+  // Animation variants for table rows
   const rowVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (i: number) => ({
@@ -74,7 +72,7 @@ export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
       },
     }),
   };
-
+  
   const tableHeaders: { key: keyof Project; label: string }[] = [
     { key: "name", label: "Project" },
     { key: "repository", label: "Repository" },
@@ -109,12 +107,8 @@ export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
                   variants={rowVariants}
                   className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                 >
-                  {visibleColumns.has("name") && (
-                    <TableCell className="font-medium">
-                      {project.name}
-                    </TableCell>
-                  )}
-
+                  {visibleColumns.has("name") && <TableCell className="font-medium">{project.name}</TableCell>}
+                  
                   {visibleColumns.has("repository") && (
                     <TableCell>
                       <a
@@ -123,39 +117,23 @@ export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
                       >
-                        <span className="truncate max-w-xs">
-                          {project.repository.replace("https://", "")}
-                        </span>
+                        <span className="truncate max-w-xs">{project.repository.replace('https://', '')}</span>
                         <ExternalLink className="h-3 w-3 flex-shrink-0" />
                       </a>
                     </TableCell>
                   )}
-
-                  {visibleColumns.has("team") && (
-                    <TableCell>{project.team}</TableCell>
-                  )}
-                  {visibleColumns.has("tech") && (
-                    <TableCell>{project.tech}</TableCell>
-                  )}
-                  {visibleColumns.has("createdAt") && (
-                    <TableCell>{project.createdAt}</TableCell>
-                  )}
-
-                  {visibleColumns.has("contributors") && (
+                  
+                  {visibleColumns.has("team") && <TableCell>{project.team}</TableCell>}
+                  {visibleColumns.has("tech") && <TableCell>{project.tech}</TableCell>}
+                  {visibleColumns.has("createdAt") && <TableCell>{project.createdAt}</TableCell>}
+                  
+                  {/* {visibleColumns.has("contributors") && (
                     <TableCell>
                       <div className="flex -space-x-2">
                         {project.contributors.map((contributor, idx) => (
-                          <Avatar
-                            key={idx}
-                            className="h-8 w-8 border-2 border-background"
-                          >
-                            <AvatarImage
-                              src={contributor.src}
-                              alt={contributor.alt}
-                            />
-                            <AvatarFallback>
-                              {contributor.fallback}
-                            </AvatarFallback>
+                          <Avatar key={idx} className="h-8 w-8 border-2 border-background">
+                            <AvatarImage src={contributor.src} alt={contributor.alt} />
+                            <AvatarFallback>{contributor.fallback}</AvatarFallback>
                           </Avatar>
                         ))}
                       </div>
@@ -164,23 +142,16 @@ export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
 
                   {visibleColumns.has("status") && (
                     <TableCell>
-                      <Badge
-                        className={cn(
-                          badgeVariants({ variant: project.status.variant }),
-                        )}
-                      >
+                      <Badge className={cn(badgeVariants({ variant: project.status.variant }))}>
                         {project.status.text}
                       </Badge>
                     </TableCell>
-                  )}
+                  )} */}
                 </motion.tr>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={visibleColumns.size}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={visibleColumns.size} className="h-24 text-center">
                   No results.
                 </TableCell>
               </TableRow>
@@ -191,4 +162,3 @@ export const ProjectDataTable: React.FC<ProjectDataTableProps> = ({
     </div>
   );
 };
-

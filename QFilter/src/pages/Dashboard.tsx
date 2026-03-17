@@ -4,12 +4,23 @@ import { QrUploadPanel } from "@/components/qr-upload-panel";
 import {
   Project,
   ProjectDataTable,
-} from "@/components/project-data-table";
-import { Button } from "@/components/uoload/button";
+} from "@/components/data-table/project-data-table";
+import { Input as DataTableInput } from "@/components/data-table/input";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/data-table/drop";
+import { Button as UploadButton } from "@/components/uoload/button";
+import { Button as DataTableButton } from "@/components/data-table/button";
+import { ListFilter, Columns } from "lucide-react";
 
-const sampleProjects: Project[] = [
+const mockProjects: Project[] = [
   {
-    id: "1",
+    id: "proj-01",
     name: "ShadCN Clone",
     repository: "https://github.com/ruixenui/ruixen-buttons",
     team: "UI Guild",
@@ -17,23 +28,20 @@ const sampleProjects: Project[] = [
     createdAt: "2024-06-01",
     contributors: [
       {
-        src: "https://avatars.githubusercontent.com/u/1?v=4",
-        alt: "Contributor 1",
-        fallback: "C1",
+        src: "https://i.pravatar.cc/150?u=a042581f4e29026704d",
+        alt: "User 1",
+        fallback: "U1",
       },
       {
-        src: "https://avatars.githubusercontent.com/u/2?v=4",
-        alt: "Contributor 2",
-        fallback: "C2",
+        src: "https://i.pravatar.cc/150?u=a042581f4e29026705d",
+        alt: "User 2",
+        fallback: "U2",
       },
     ],
-    status: {
-      text: "Active",
-      variant: "active",
-    },
+    status: { text: "Active", variant: "active" },
   },
   {
-    id: "2",
+    id: "proj-02",
     name: "RUIXEN Components",
     repository: "https://github.com/ruixenui/ruixen-buttons",
     team: "Component Devs",
@@ -41,54 +49,75 @@ const sampleProjects: Project[] = [
     createdAt: "2024-05-22",
     contributors: [
       {
-        src: "https://avatars.githubusercontent.com/u/3?v=4",
-        alt: "Contributor 3",
-        fallback: "C3",
+        src: "https://i.pravatar.cc/150?u=a042581f4e29026706d",
+        alt: "User 3",
+        fallback: "U3",
       },
       {
-        src: "https://avatars.githubusercontent.com/u/4?v=4",
-        alt: "Contributor 4",
-        fallback: "C4",
+        src: "https://i.pravatar.cc/150?u=a042581f4e29026707d",
+        alt: "User 4",
+        fallback: "U4",
+      },
+      {
+        src: "https://i.pravatar.cc/150?u=a042581f4e29026708d",
+        alt: "User 5",
+        fallback: "U5",
       },
     ],
-    status: {
-      text: "In Progress",
-      variant: "inProgress",
-    },
+    status: { text: "Progress", variant: "inProgress" },
   },
+];
+
+const allColumns: (keyof Project)[] = [
+  "name",
+  "repository",
+  "team",
+  "tech",
+  "createdAt",
+  "contributors",
+  "status",
 ];
 
 export function Dashboard() {
   const { t } = useTranslation();
   const [hasImages, setHasImages] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-
-  const visibleColumns = useMemo(
-    () =>
-      new Set<keyof Project>([
-        "name",
-        "repository",
-        "team",
-        "tech",
-        "createdAt",
-        "contributors",
-        "status",
-      ]),
-    [],
+  const [techFilter, setTechFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [visibleColumns, setVisibleColumns] = useState<Set<keyof Project>>(
+    () => new Set(allColumns),
   );
+
+  const filteredProjects = useMemo(() => {
+    return mockProjects.filter((project) => {
+      const techMatch =
+        techFilter === "" ||
+        project.tech.toLowerCase().includes(techFilter.toLowerCase());
+      const statusMatch =
+        statusFilter === "all" || project.status.variant === statusFilter;
+      return techMatch && statusMatch;
+    });
+  }, [techFilter, statusFilter]);
+
+  const toggleColumn = (column: keyof Project) => {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(column)) {
+        next.delete(column);
+      } else {
+        next.add(column);
+      }
+      return next;
+    });
+  };
 
   const handleUploaded = () => {
     setHasImages(true);
-    if (projects.length === 0) {
-      setProjects(sampleProjects);
-    }
     setShowUploadDialog(false);
   };
 
   const handleClear = () => {
     setHasImages(false);
-    setProjects([]);
   };
 
   return (
@@ -107,7 +136,7 @@ export function Dashboard() {
               总图片
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? projects.length : 0}
+              {hasImages ? mockProjects.length : 0}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-800 px-4 py-3">
@@ -115,7 +144,7 @@ export function Dashboard() {
               含二维码
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? projects.length : 0}
+              {hasImages ? mockProjects.length : 0}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-800 px-4 py-3">
@@ -131,7 +160,7 @@ export function Dashboard() {
               未过期
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? projects.length : 0}
+              {hasImages ? mockProjects.length : 0}
             </div>
           </div>
         </div>
@@ -146,7 +175,7 @@ export function Dashboard() {
               />
             </div>
           ) : (
-            <div className="flex-1 flex flex-col gap-4">
+              <div className="flex-1 flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
@@ -160,24 +189,100 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
+                  <UploadButton
                     variant="outline"
                     size="sm"
                     onClick={() => setShowUploadDialog(true)}
                   >
                     上传
-                  </Button>
-                  <Button
+                  </UploadButton>
+                  <UploadButton
                     variant="ghost"
                     size="sm"
                     onClick={handleClear}
                   >
                     清空
-                  </Button>
+                  </UploadButton>
                 </div>
               </div>
+
+              <div className="mt-4 flex flex-col gap-4 mb-2 sm:flex-row sm:items-center">
+                <div className="flex flex-1 gap-4">
+                  <DataTableInput
+                    placeholder="Filter by technology..."
+                    value={techFilter}
+                    onChange={(e) => setTechFilter(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <DataTableButton
+                        variant="outline"
+                        className="flex items-center gap-2"
+                      >
+                        <ListFilter className="h-4 w-4" />
+                        <span>Status</span>
+                      </DataTableButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuCheckboxItem
+                        checked={statusFilter === "all"}
+                        onCheckedChange={() => setStatusFilter("all")}
+                      >
+                        All
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={statusFilter === "active"}
+                        onCheckedChange={() => setStatusFilter("active")}
+                      >
+                        Active
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={statusFilter === "inProgress"}
+                        onCheckedChange={() => setStatusFilter("inProgress")}
+                      >
+                        In Progress
+                      </DropdownMenuCheckboxItem>
+                      <DropdownMenuCheckboxItem
+                        checked={statusFilter === "onHold"}
+                        onCheckedChange={() => setStatusFilter("onHold")}
+                      >
+                        On Hold
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <DataTableButton
+                      variant="outline"
+                      className="flex items-center gap-2"
+                    >
+                      <Columns className="h-4 w-4" />
+                      <span>Columns</span>
+                    </DataTableButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {allColumns.map((column) => (
+                      <DropdownMenuCheckboxItem
+                        key={column}
+                        className="capitalize"
+                        checked={visibleColumns.has(column)}
+                        onCheckedChange={() => toggleColumn(column)}
+                      >
+                        {column}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
               <ProjectDataTable
-                projects={projects}
+                projects={filteredProjects}
                 visibleColumns={visibleColumns}
               />
             </div>
