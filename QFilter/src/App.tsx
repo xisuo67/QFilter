@@ -1,16 +1,46 @@
-import { useState } from "react";
-import { LayoutDashboard, Settings as SettingsIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  LayoutDashboard,
+  Settings as SettingsIcon,
+  Sun,
+  Moon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
 import { Dashboard } from "@/pages/Dashboard";
 import { Settings } from "@/pages/Settings";
 
 type TabId = "dashboard" | "settings";
+type Theme = "light" | "dark";
 
 function App() {
   const { t, i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [theme, setTheme] = useState<Theme>("light");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("qfilter-theme") as Theme | null;
+    if (stored === "light" || stored === "dark") {
+      setTheme(stored);
+      document.documentElement.classList.toggle("dark", stored === "dark");
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initial: Theme = prefersDark ? "dark" : "light";
+    setTheme(initial);
+    document.documentElement.classList.toggle("dark", initial === "dark");
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next: Theme = prev === "dark" ? "light" : "dark";
+      document.documentElement.classList.toggle("dark", next === "dark");
+      window.localStorage.setItem("qfilter-theme", next);
+      return next;
+    });
+  };
 
   const links = [
     {
@@ -43,7 +73,19 @@ function App() {
               <div className="flex items-center gap-2 px-1 py-1">
                 <div className="h-6 w-6 rounded-lg bg-black dark:bg-white" />
                 <span className="text-sm font-semibold">{t("appName")}</span>
-                <div className="ml-auto flex gap-1">
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+                    aria-label={theme === "dark" ? t("theme.light") : t("theme.dark")}
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </button>
                   <button
                     type="button"
                     className="text-xs px-2 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-100"
