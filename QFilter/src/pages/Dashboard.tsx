@@ -217,27 +217,16 @@ export function Dashboard() {
       try {
         //由于不想暴露私人密钥，通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
         const ossUrl = await uploadToQiniu(file);
-        debugger;
-        // TODO: 替换为你实际的 OCR 服务
-        const res = await fetch("http://localhost:8080/api/v1/ocr/qr", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: ossUrl }),
-        });
 
-        if (!res.ok) {
-          throw new Error(`识别服务错误: ${res.status}`);
-        }
-
-        const data = (await res.json()) as {
+        const data = await invoke<{
           success: boolean;
           message?: string;
           type?: string;
           name?: string;
           expire?: string;
           qrcode_url?: string;
-        };
-
+        }>("ocr_qr", { imageUrl: ossUrl });
+        debugger;
         const today = new Date();
 
         if (!data.success || !data.type) {

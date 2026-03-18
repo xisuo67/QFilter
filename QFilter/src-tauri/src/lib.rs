@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use image::DynamicImage;
 use rxing::helpers;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Pool, Row, Sqlite,
@@ -196,6 +197,137 @@ async fn get_pool() -> Result<Pool<Sqlite>> {
     Ok(pool)
 }
 
+#[derive(Debug, Serialize)]
+struct OcrResult {
+    success: bool,
+    message: Option<String>,
+    #[serde(rename = "type")]
+    ocr_type: Option<String>,
+    name: Option<String>,
+    expire: Option<String>,
+    qrcode_url: Option<String>,
+}
+
+#[tauri::command]
+async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
+    let pool = get_pool()
+        .await
+        .map_err(|e| format!("db init error: {}", e))?;
+
+    // 读取模型配置
+    let row = sqlx::query(
+        r#"
+        SELECT api_url, model_name, api_key, prompt
+        FROM model_settings
+        WHERE id = 1
+        "#,
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("db read error: {}", e))?;
+
+    let config = if let Some(r) = row {
+        ModelConfig {
+            api_url: r.get("api_url"),
+            model_name: r.get("model_name"),
+            api_key: r.get("api_key"),
+            prompt: r.get("prompt"),
+        }
+    } else {
+        return Err("OCR 配置未设置，请先在设置页填写并保存。".to_string());
+    };
+
+    let client = reqwest::Client::new();
+
+    let body = serde_json::json!({
+        "model": config.model_name,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                            "min_pixels": 3072,
+                            "max_pixels": 8_388_608
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": config.prompt
+                    }
+                ]
+            }
+        ]
+    });
+
+    let resp = client
+        .post(&config.api_url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.api_key),
+        )
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("调用 OCR 接口失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "OCR 服务返回错误状态码: {}",
+            resp.status()
+        ));
+    }
+
+    // DashScope 兼容 OpenAI，假设 content 里是模型输出的 JSON 字符串
+    let resp_json: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 OCR 响应 JSON 失败: {e}"))?;
+
+    let content_text = resp_json
+        .get("choices")
+        .and_then(|v| v.get(0))
+        .and_then(|v| v.get("message"))
+        .and_then(|v| v.get("content"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "OCR 响应中缺少 message.content 字段".to_string())?;
+
+    // content_text 应该是一个 JSON 字符串，按 Settings 里配置的 prompt 返回
+    let parsed: Value =
+        serde_json::from_str(content_text).map_err(|e| {
+            format!("解析 OCR 内容为 JSON 失败: {e}, content: {content_text}")
+        })?;
+
+    let name = parsed
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let expire = parsed
+        .get("expire")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let qrcode_url = parsed
+        .get("qrcode_url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let ocr_type = parsed
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    Ok(OcrResult {
+        success: true,
+        message: None,
+        ocr_type,
+        name,
+        expire,
+        qrcode_url,
+    })
+}
+
 #[tauri::command]
 async fn save_model_config(config: ModelConfig) -> Result<(), String> {
     let pool = get_pool()
@@ -263,7 +395,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_model_config,
             load_model_config,
-            validate_qr
+            validate_qr,
+            ocr_qr
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
