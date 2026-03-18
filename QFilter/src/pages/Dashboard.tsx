@@ -249,7 +249,7 @@ export function Dashboard() {
           onClick={() => setShowUploadDialog(false)}
         >
           <div
-            className="w-full max-w-4xl rounded-2xl bg-white dark:bg-neutral-900 p-6 shadow-2xl border border-border/70 text-neutral-900 dark:text-neutral-50"
+            className="w-full max-w-5xl rounded-2xl bg-white dark:bg-neutral-900 px-8 py-6 shadow-2xl border border-border/70 text-neutral-900 dark:text-neutral-50 max-h-[520px] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -265,7 +265,13 @@ export function Dashboard() {
                 ×
               </button>
             </div>
-            <QrUploadPanel onUploaded={handleUploaded} useInnerDashed />
+            <div className="flex-1 flex items-center justify-center py-4">
+              <QrUploadPanel
+                onUploaded={handleUploaded}
+                useInnerDashed
+                className="h-80 mx-auto"
+              />
+            </div>
           </div>
         </div>
       )}

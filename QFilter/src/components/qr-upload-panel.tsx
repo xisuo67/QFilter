@@ -65,7 +65,7 @@ export function QrUploadPanel({
   return (
     <div
       className={cn(
-        "w-full flex items-center justify-center text-center text-foreground",
+        "w-full h-full flex items-center justify-center text-center text-foreground",
         className,
       )}
     >
@@ -85,7 +85,7 @@ export function QrUploadPanel({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          "flex flex-col items-center justify-center gap-3 rounded-lg bg-card shadow-sm transition-colors hover:bg-card/90",
+          "flex h-full w-full flex-col items-center justify-center gap-3 rounded-lg bg-card shadow-sm transition-colors hover:bg-card/90",
           useInnerDashed && "border-2 border-dashed border-primary/70",
           isDragging && "bg-primary/5",
         )}
