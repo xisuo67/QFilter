@@ -8,6 +8,7 @@ import {
 import { Button as UploadButton } from "@/components/uoload/button";
 import type { UploadedImagePayload } from "@/components/uoload/use-image-upload";
 import { invoke } from "@tauri-apps/api/core";
+import * as qiniu from "qiniu-js";
 
 type QrRecord = Project & {
   qrImageRemote: string;
@@ -103,6 +104,49 @@ export function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const uploadToQiniu = async (file: File): Promise<string> => {
+    const tokenResp = await fetch(
+      "http://localhost:8888/base/qiniuUploadToken",
+    );
+    if (!tokenResp.ok) {
+      throw new Error(`获取七牛上传凭证失败: ${tokenResp.status}`);
+    }
+
+    const tokenJson: {
+      code: number;
+      data?: { keyPrefix: string; uploadToken: string; cdnDomain: string };
+      msg?: string;
+    } = await tokenResp.json();
+
+    if (tokenJson.code !== 0 || !tokenJson.data?.uploadToken) {
+      throw new Error(
+        `获取七牛上传凭证失败: ${tokenJson.msg || "响应格式不正确"}`,
+      );
+    }
+
+    const { keyPrefix, uploadToken,cdnDomain } = tokenJson.data;
+    const key = `${keyPrefix}/${file.name}`;
+    const putExtra: Record<string, unknown> = {};
+    const config: Record<string, unknown> = {};
+
+    return await new Promise<string>((resolve, reject) => {
+      qiniu
+        .upload(file, key, uploadToken, putExtra, config)
+        .subscribe({
+          next() {
+            // 可以在这里更新进度条
+          },
+          error(err) {
+            reject(err);
+          },
+          complete(res: { key?: string }) {
+            const finalKey = res.key || key;
+            resolve(`${cdnDomain}/${finalKey}`);
+          },
+        });
+    });
+  };
+
   const handleUploaded = async ({ file, localUrl }: UploadedImagePayload) => {
     setShowUploadDialog(false);
 
@@ -169,20 +213,11 @@ export function Dashboard() {
         } as QrRecord,
       ]);
 
-      // 3. 异步执行 OSS 上传 + OCR，完成后更新这条记录
+      // 3. 异步执行七牛上传（因为ocr服务需要网络图片，所以只能先上传到七牛云） + OCR，完成后更新这条记录
       try {
-        // TODO: 替换为你实际的 OSS 上传接口
-        const ossUrl = await (async () => {
-          // const formData = new FormData();
-          // formData.append("file", file);
-          // const res = await fetch("/api/upload", { method: "POST", body: formData });
-          // const data = await res.json();
-          // return data.url as string;
-          return Promise.resolve(
-            "https://your-oss-url.example.com/path/to/image.jpg",
-          );
-        })();
-
+        //由于不想暴露私人密钥，通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
+        const ossUrl = await uploadToQiniu(file);
+        debugger;
         // TODO: 替换为你实际的 OCR 服务
         const res = await fetch("http://localhost:8080/api/v1/ocr/qr", {
           method: "POST",
