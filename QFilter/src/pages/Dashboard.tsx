@@ -1,114 +1,103 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QrUploadPanel } from "@/components/qr-upload-panel";
 import {
   Project,
   ProjectDataTable,
 } from "@/components/data-table/project-data-table";
-import { Input as DataTableInput } from "@/components/data-table/input";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/data-table/drop";
 import { Button as UploadButton } from "@/components/uoload/button";
-import { Button as DataTableButton } from "@/components/data-table/button";
-import { ListFilter, Columns } from "lucide-react";
 
 const mockProjects: Project[] = [
   {
     id: "proj-01",
-    name: "ShadCN Clone",
-    repository: "https://github.com/ruixenui/ruixen-buttons",
-    team: "UI Guild",
-    tech: "Next.js",
-    createdAt: "2024-06-01",
-    contributors: [
-      {
-        src: "https://i.pravatar.cc/150?u=a042581f4e29026704d",
-        alt: "User 1",
-        fallback: "U1",
-      },
-      {
-        src: "https://i.pravatar.cc/150?u=a042581f4e29026705d",
-        alt: "User 2",
-        fallback: "U2",
-      },
-    ],
-    status: { text: "Active", variant: "active" },
+    name: "微信群 1",
+    qrImage: "https://images.pexels.com/photos/1051075/pexels-photo-1051075.jpeg",
+    expireAt: "2025-12-31 23:59",
+    expired: false,
   },
   {
     id: "proj-02",
-    name: "RUIXEN Components",
-    repository: "https://github.com/ruixenui/ruixen-buttons",
-    team: "Component Devs",
-    tech: "React",
-    createdAt: "2024-05-22",
-    contributors: [
-      {
-        src: "https://i.pravatar.cc/150?u=a042581f4e29026706d",
-        alt: "User 3",
-        fallback: "U3",
-      },
-      {
-        src: "https://i.pravatar.cc/150?u=a042581f4e29026707d",
-        alt: "User 4",
-        fallback: "U4",
-      },
-      {
-        src: "https://i.pravatar.cc/150?u=a042581f4e29026708d",
-        alt: "User 5",
-        fallback: "U5",
-      },
-    ],
-    status: { text: "Progress", variant: "inProgress" },
+    name: "微信群 2",
+    qrImage: "https://images.pexels.com/photos/1308746/pexels-photo-1308746.jpeg",
+    expireAt: "2024-12-31 23:59",
+    expired: true,
   },
 ];
 
 const allColumns: (keyof Project)[] = [
   "name",
-  "repository",
-  "team",
-  "tech",
-  "createdAt",
-  "contributors",
-  "status",
+  "qrImage",
+  "expireAt",
+  "expired",
 ];
 
 export function Dashboard() {
   const { t } = useTranslation();
   const [hasImages, setHasImages] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [techFilter, setTechFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [visibleColumns, setVisibleColumns] = useState<Set<keyof Project>>(
+  const [visibleColumns] = useState<Set<keyof Project>>(
     () => new Set(allColumns),
   );
+  const [expiredFilter, setExpiredFilter] = useState<"all" | "expired" | "active">("all");
+  const [expiredSort, setExpiredSort] = useState<"none" | "asc" | "desc">("none");
+
+  const tableHeaders: { key: keyof Project; label: string }[] = [
+    { key: "name", label: t("dashboard.name", "名称") },
+    { key: "qrImage", label: t("dashboard.qrImage", "二维码") },
+    { key: "expireAt", label: t("dashboard.expireAt", "有效期") },
+    { key: "expired", label: t("dashboard.expired", "是否过期") },
+  ];
 
   const filteredProjects = useMemo(() => {
-    return mockProjects.filter((project) => {
-      const techMatch =
-        techFilter === "" ||
-        project.tech.toLowerCase().includes(techFilter.toLowerCase());
-      const statusMatch =
-        statusFilter === "all" || project.status.variant === statusFilter;
-      return techMatch && statusMatch;
-    });
-  }, [techFilter, statusFilter]);
+    let list = [...mockProjects];
 
-  const toggleColumn = (column: keyof Project) => {
-    setVisibleColumns((prev) => {
-      const next = new Set(prev);
-      if (next.has(column)) {
-        next.delete(column);
-      } else {
-        next.add(column);
-      }
-      return next;
-    });
+    if (expiredFilter !== "all") {
+      list = list.filter((p) =>
+        expiredFilter === "expired" ? p.expired : !p.expired,
+      );
+    }
+
+    if (expiredSort !== "none") {
+      const dir = expiredSort === "asc" ? 1 : -1;
+      list = list.slice().sort((a, b) => {
+        return (Number(a.expired) - Number(b.expired)) * dir;
+      });
+    }
+
+    return list;
+  }, [expiredFilter, expiredSort]);
+
+  const handleExportCsv = () => {
+    const rows = filteredProjects.map((p) => ({
+      name: p.name,
+      qrImage: p.qrImage,
+      expireAt: p.expireAt,
+      expired: p.expired ? "true" : "false",
+    }));
+
+    const header = ["name", "qrImage", "expireAt", "expired"];
+    const csv = [
+      header.join(","),
+      ...rows.map((row) =>
+        header
+          .map((key) => {
+            const value = row[key as keyof typeof row] ?? "";
+            const str = String(value).replace(/"/g, '""');
+            return `"${str}"`;
+          })
+          .join(","),
+      ),
+    ].join("\r\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "qfilter-export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleUploaded = () => {
@@ -188,6 +177,31 @@ export function Dashboard() {
                     )}
                   </p>
                 </div>
+              </div>
+
+              <div className="mt-4 mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
+                  <span>{t("dashboard.expiredFilterLabel", "是否过期")}</span>
+                  <select
+                    className="h-8 rounded-md border border-neutral-300 bg-white px-2 text-xs text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-50"
+                    value={expiredFilter}
+                    onChange={(e) =>
+                      setExpiredFilter(
+                        e.target.value as "all" | "expired" | "active",
+                      )
+                    }
+                  >
+                    <option value="all">
+                      {t("dashboard.expiredFilter.all", "全部")}
+                    </option>
+                    <option value="expired">
+                      {t("dashboard.expiredFilter.expired", "已过期")}
+                    </option>
+                    <option value="active">
+                      {t("dashboard.expiredFilter.active", "未过期")}
+                    </option>
+                  </select>
+                </div>
                 <div className="flex gap-2">
                   <UploadButton
                     variant="outline"
@@ -195,6 +209,13 @@ export function Dashboard() {
                     onClick={() => setShowUploadDialog(true)}
                   >
                     上传
+                  </UploadButton>
+                  <UploadButton
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCsv}
+                  >
+                    导出 CSV
                   </UploadButton>
                   <UploadButton
                     variant="ghost"
@@ -206,84 +227,16 @@ export function Dashboard() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-4 mb-2 sm:flex-row sm:items-center">
-                <div className="flex flex-1 gap-4">
-                  <DataTableInput
-                    placeholder="Filter by technology..."
-                    value={techFilter}
-                    onChange={(e) => setTechFilter(e.target.value)}
-                    className="max-w-xs"
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <DataTableButton
-                        variant="outline"
-                        className="flex items-center gap-2"
-                      >
-                        <ListFilter className="h-4 w-4" />
-                        <span>Status</span>
-                      </DataTableButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuCheckboxItem
-                        checked={statusFilter === "all"}
-                        onCheckedChange={() => setStatusFilter("all")}
-                      >
-                        All
-                      </DropdownMenuCheckboxItem>
-                      <DropdownMenuCheckboxItem
-                        checked={statusFilter === "active"}
-                        onCheckedChange={() => setStatusFilter("active")}
-                      >
-                        Active
-                      </DropdownMenuCheckboxItem>
-                      <DropdownMenuCheckboxItem
-                        checked={statusFilter === "inProgress"}
-                        onCheckedChange={() => setStatusFilter("inProgress")}
-                      >
-                        In Progress
-                      </DropdownMenuCheckboxItem>
-                      <DropdownMenuCheckboxItem
-                        checked={statusFilter === "onHold"}
-                        onCheckedChange={() => setStatusFilter("onHold")}
-                      >
-                        On Hold
-                      </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <DataTableButton
-                      variant="outline"
-                      className="flex items-center gap-2"
-                    >
-                      <Columns className="h-4 w-4" />
-                      <span>Columns</span>
-                    </DataTableButton>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {allColumns.map((column) => (
-                      <DropdownMenuCheckboxItem
-                        key={column}
-                        className="capitalize"
-                        checked={visibleColumns.has(column)}
-                        onCheckedChange={() => toggleColumn(column)}
-                      >
-                        {column}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
               <ProjectDataTable
                 projects={filteredProjects}
                 visibleColumns={visibleColumns}
+                headers={tableHeaders}
+                expiredSort={expiredSort}
+                onToggleExpiredSort={() =>
+                  setExpiredSort((prev) =>
+                    prev === "none" ? "asc" : prev === "asc" ? "desc" : "none",
+                  )
+                }
               />
             </div>
           )}

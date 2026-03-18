@@ -1,7 +1,4 @@
-import * as React from "react";
 import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
-import { cva, type VariantProps } from "class-variance-authority";
 import {
   Table,
   TableBody,
@@ -10,55 +7,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/data-table/table";
-// import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-// import { Badge } from "@/components/ui/badge";
-import { ExternalLink } from "lucide-react";
-
-// --- TYPE DEFINITIONS ---
-interface Contributor {
-  src: string;
-  alt: string;
-  fallback: string;
-}
-
-type StatusVariant = "active" | "inProgress" | "onHold";
 
 export interface Project {
   id: string;
   name: string;
-  repository: string;
-  team: string;
-  tech: string;
-  createdAt: string;
-  contributors: Contributor[];
-  status: {
-    text: string;
-    variant: StatusVariant;
-  };
+  qrImage: string;
+  expireAt: string;
+  expired: boolean;
 }
 
-// --- PROPS INTERFACE ---
 interface ProjectDataTableProps {
   projects: Project[];
   visibleColumns: Set<keyof Project>;
+  headers: { key: keyof Project; label: string }[];
+  expiredSort: "none" | "asc" | "desc";
+  onToggleExpiredSort: () => void;
+  toolbar?: React.ReactNode;
 }
 
-// --- STATUS BADGE VARIANTS ---
-const badgeVariants = cva("capitalize text-white", {
-  variants: {
-    variant: {
-      active: "bg-green-500 hover:bg-green-600",
-      inProgress: "bg-yellow-500 hover:bg-yellow-600",
-      onHold: "bg-red-500 hover:bg-red-600",
-    },
-  },
-  defaultVariants: {
-    variant: "active",
-  },
-});
-
-// --- MAIN COMPONENT ---
-export const ProjectDataTable = ({ projects, visibleColumns }: ProjectDataTableProps) => {
+export const ProjectDataTable = ({
+  projects,
+  visibleColumns,
+  headers,
+  expiredSort,
+  onToggleExpiredSort,
+  toolbar,
+}: ProjectDataTableProps) => {
   // Animation variants for table rows
   const rowVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -72,28 +46,46 @@ export const ProjectDataTable = ({ projects, visibleColumns }: ProjectDataTableP
       },
     }),
   };
-  
-  const tableHeaders: { key: keyof Project; label: string }[] = [
-    { key: "name", label: "Project" },
-    { key: "repository", label: "Repository" },
-    { key: "team", label: "Team" },
-    { key: "tech", label: "Tech" },
-    { key: "createdAt", label: "Created At" },
-    { key: "contributors", label: "Contributors" },
-    { key: "status", label: "Status" },
-  ];
 
   return (
     <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+      {toolbar && (
+        <div className="flex items-center justify-end px-4 pt-3 pb-1">
+          {toolbar}
+        </div>
+      )}
       <div className="relative w-full overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              {tableHeaders
+              {headers
                 .filter((header) => visibleColumns.has(header.key))
-                .map((header) => (
-                  <TableHead key={header.key}>{header.label}</TableHead>
-                ))}
+                .map((header) => {
+                  if (header.key !== "expired") {
+                    return (
+                      <TableHead key={header.key}>{header.label}</TableHead>
+                    );
+                  }
+
+                  return (
+                    <TableHead
+                      key={header.key}
+                      className="cursor-pointer select-none"
+                      onClick={onToggleExpiredSort}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {header.label}
+                        <span className="text-[10px] text-muted-foreground">
+                          {expiredSort === "none"
+                            ? "↕"
+                            : expiredSort === "asc"
+                              ? "↑"
+                              : "↓"}
+                        </span>
+                      </span>
+                    </TableHead>
+                  );
+                })}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -107,46 +99,39 @@ export const ProjectDataTable = ({ projects, visibleColumns }: ProjectDataTableP
                   variants={rowVariants}
                   className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                 >
-                  {visibleColumns.has("name") && <TableCell className="font-medium">{project.name}</TableCell>}
-                  
-                  {visibleColumns.has("repository") && (
-                    <TableCell>
-                      <a
-                        href={project.repository}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <span className="truncate max-w-xs">{project.repository.replace('https://', '')}</span>
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                      </a>
-                    </TableCell>
-                  )}
-                  
-                  {visibleColumns.has("team") && <TableCell>{project.team}</TableCell>}
-                  {visibleColumns.has("tech") && <TableCell>{project.tech}</TableCell>}
-                  {visibleColumns.has("createdAt") && <TableCell>{project.createdAt}</TableCell>}
-                  
-                  {/* {visibleColumns.has("contributors") && (
-                    <TableCell>
-                      <div className="flex -space-x-2">
-                        {project.contributors.map((contributor, idx) => (
-                          <Avatar key={idx} className="h-8 w-8 border-2 border-background">
-                            <AvatarImage src={contributor.src} alt={contributor.alt} />
-                            <AvatarFallback>{contributor.fallback}</AvatarFallback>
-                          </Avatar>
-                        ))}
-                      </div>
+                  {visibleColumns.has("name") && (
+                    <TableCell className="font-medium">
+                      {project.name}
                     </TableCell>
                   )}
 
-                  {visibleColumns.has("status") && (
+                  {visibleColumns.has("qrImage") && (
                     <TableCell>
-                      <Badge className={cn(badgeVariants({ variant: project.status.variant }))}>
-                        {project.status.text}
-                      </Badge>
+                      <img
+                        src={project.qrImage}
+                        alt={project.name}
+                        className="h-14 w-14 rounded-md border object-cover"
+                      />
                     </TableCell>
-                  )} */}
+                  )}
+
+                  {visibleColumns.has("expireAt") && (
+                    <TableCell>{project.expireAt}</TableCell>
+                  )}
+
+                  {visibleColumns.has("expired") && (
+                    <TableCell>
+                      <span
+                        className={
+                          project.expired
+                            ? "text-red-500 font-medium"
+                            : "text-emerald-500 font-medium"
+                        }
+                      >
+                        {project.expired ? "已过期" : "未过期"}
+                      </span>
+                    </TableCell>
+                  )}
                 </motion.tr>
               ))
             ) : (
