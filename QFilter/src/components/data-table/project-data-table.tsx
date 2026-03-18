@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Table,
@@ -14,8 +14,9 @@ export interface Project {
   name: string;
   qrTypeLabel: string;
   qrImage: string;
+  qrImageRemote?: string;
   expireAt: string;
-  expired: boolean;
+  expired: boolean | null;
 }
 
 interface ProjectDataTableProps {
@@ -49,6 +50,18 @@ export const ProjectDataTable = ({
       },
     }),
   };
+
+  // Esc 关闭二维码预览弹窗
+  useEffect(() => {
+    if (!previewSrc) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPreviewSrc(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [previewSrc]);
 
   return (
     <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -117,7 +130,11 @@ export const ProjectDataTable = ({
                       <button
                         type="button"
                         className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
-                        onClick={() => setPreviewSrc(project.qrImage)}
+                        onClick={() => {
+                          const src = project.qrImage || project.qrImageRemote;
+                          if (!src) return;
+                          setPreviewSrc(src);
+                        }}
                       >
                         查看二维码
                       </button>
@@ -130,15 +147,21 @@ export const ProjectDataTable = ({
 
                   {visibleColumns.has("expired") && (
                     <TableCell>
-                      <span
-                        className={
-                          project.expired
-                            ? "text-red-500 font-medium"
-                            : "text-emerald-500 font-medium"
-                        }
-                      >
-                        {project.expired ? "已过期" : "未过期"}
-                      </span>
+                      {project.expired === null ? (
+                        <span className="text-neutral-400 dark:text-neutral-500">
+                          -
+                        </span>
+                      ) : (
+                        <span
+                          className={
+                            project.expired
+                              ? "text-red-500 font-medium"
+                              : "text-emerald-500 font-medium"
+                          }
+                        >
+                          {project.expired ? "已过期" : "未过期"}
+                        </span>
+                      )}
                     </TableCell>
                   )}
                 </motion.tr>

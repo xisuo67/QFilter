@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QrUploadPanel } from "@/components/qr-upload-panel";
 import {
@@ -32,7 +32,9 @@ export function Dashboard() {
     () => new Set(allColumns),
   );
   const [records, setRecords] = useState<QrRecord[]>([]);
-  const [expiredFilter, setExpiredFilter] = useState<"all" | "expired" | "active">("all");
+  const [expiredFilter, setExpiredFilter] = useState<
+    "all" | "expired" | "active" | "unknown"
+  >("all");
   const [expiredSort, setExpiredSort] = useState<"none" | "asc" | "desc">("none");
 
   const tableHeaders: { key: keyof Project; label: string }[] = [
@@ -47,15 +49,20 @@ export function Dashboard() {
     let list = records.filter((p) => p.validQr);
 
     if (expiredFilter !== "all") {
-      list = list.filter((p) =>
-        expiredFilter === "expired" ? p.expired : !p.expired,
-      );
+      list = list.filter((p) => {
+        if (expiredFilter === "expired") return p.expired === true;
+        if (expiredFilter === "active") return p.expired === false;
+        if (expiredFilter === "unknown") return p.expired === null;
+        return true;
+      });
     }
 
     if (expiredSort !== "none") {
       const dir = expiredSort === "asc" ? 1 : -1;
       list = list.slice().sort((a, b) => {
-        return (Number(a.expired) - Number(b.expired)) * dir;
+        const rank = (v: boolean | null) =>
+          v === true ? 2 : v === false ? 1 : 0;
+        return (rank(a.expired) - rank(b.expired)) * dir;
       });
     }
 
@@ -67,7 +74,8 @@ export function Dashboard() {
       name: p.name,
       qrImage: p.qrImage,
       expireAt: p.expireAt,
-      expired: p.expired ? "true" : "false",
+      expired:
+        p.expired === null ? "" : p.expired ? "true" : "false",
     }));
 
     const header = ["name", "qrImage", "expireAt", "expired"];
@@ -121,7 +129,7 @@ export function Dashboard() {
             qrImage: localUrl,
             qrImageRemote: "",
             expireAt: "",
-            expired: false,
+            expired: null,
             validQr: false,
             ocrStatus: "failed",
             qrUrl: qrCheck.url,
@@ -153,7 +161,7 @@ export function Dashboard() {
           qrImage: localUrl,
           qrImageRemote: "",
           expireAt: "",
-          expired: false,
+          expired: null,
           validQr: true,
           ocrStatus: "pending",
           qrUrl: qrCheck.url,
@@ -214,7 +222,7 @@ export function Dashboard() {
         }
 
         let expireAt = data.expire || "";
-        let expired = false;
+        let expired: boolean | null = null;
 
         if (expireAt) {
           const d = new Date(expireAt);
@@ -227,6 +235,7 @@ export function Dashboard() {
             expired = d.getTime() < todayZero.getTime();
           } else {
             expireAt = "";
+            expired = null;
           }
         }
 
@@ -273,6 +282,17 @@ export function Dashboard() {
   };
 
   const handleClear = () => {
+    // 释放所有本地 blob 图片 URL，避免内存泄漏
+    records.forEach((r) => {
+      if (r.qrImage && r.qrImage.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(r.qrImage);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
     setRecords([]);
   };
 
@@ -280,10 +300,22 @@ export function Dashboard() {
   const totalValid = records.filter((r) => r.validQr).length;
   const totalInvalid = totalImages - totalValid;
   const totalNotExpired = records.filter(
-    (r) => r.validQr && !r.expired,
+    (r) => r.validQr && r.expired === false,
   ).length;
 
   const hasImages = records.length > 0;
+
+  // Esc 关闭上传弹窗
+  useEffect(() => {
+    if (!showUploadDialog) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowUploadDialog(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showUploadDialog]);
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -362,9 +394,13 @@ export function Dashboard() {
                     className="h-8 rounded-md border border-neutral-300 bg-white px-2 text-xs text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-50"
                     value={expiredFilter}
                     onChange={(e) =>
-                      setExpiredFilter(
-                        e.target.value as "all" | "expired" | "active",
-                      )
+                        setExpiredFilter(
+                          e.target.value as
+                            | "all"
+                            | "expired"
+                            | "active"
+                            | "unknown",
+                        )
                     }
                   >
                     <option value="all">
@@ -375,6 +411,9 @@ export function Dashboard() {
                     </option>
                     <option value="active">
                       {t("dashboard.expiredFilter.active", "未过期")}
+                    </option>
+                    <option value="unknown">
+                      {t("dashboard.expiredFilter.unknown", "未识别")}
                     </option>
                   </select>
                 </div>

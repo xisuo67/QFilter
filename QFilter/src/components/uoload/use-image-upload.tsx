@@ -10,7 +10,6 @@ interface UseImageUploadProps {
 }
 
 export function useImageUpload({ onUpload }: UseImageUploadProps = {}) {
-  const previewRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -33,7 +32,6 @@ export function useImageUpload({ onUpload }: UseImageUploadProps = {}) {
         if (index === 0) {
           setFileName(file.name);
           setPreviewUrl(url);
-          previewRef.current = url;
         }
 
         onUpload?.({ file, localUrl: url });
@@ -43,24 +41,12 @@ export function useImageUpload({ onUpload }: UseImageUploadProps = {}) {
   );
 
   const handleRemove = useCallback(() => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
     setPreviewUrl(null);
     setFileName(null);
-    previewRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   }, [previewUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (previewRef.current) {
-        URL.revokeObjectURL(previewRef.current);
-      }
-    };
-  }, []);
 
   return {
     previewUrl,
