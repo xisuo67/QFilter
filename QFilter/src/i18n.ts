@@ -20,10 +20,15 @@ void i18n
           dashboard: {
             title: "快筛",
             intro: "群二维码快速筛选器",
+            name: "名称",
+            qrImage: "二维码",
+            expireAt: "有效期",
+            expired: "是否过期",
           },
           settings: {
             title: "设置",
-            intro: "在这里配置你的应用偏好设置（示例占位内容，你可以按需替换为真实表单）。",
+            intro:
+              "在这里配置你的应用偏好设置（示例占位内容，你可以按需替换为真实表单）。",
           },
         },
       },
@@ -36,6 +41,11 @@ void i18n
           },
           dashboard: {
             title: "Dashboard",
+            intro: "Group QR code quick filter",
+            name: "Name",
+            qrImage: "QR Code",
+            expireAt: "Expiration",
+            expired: "Expired",
           },
           settings: {
             title: "Settings",
