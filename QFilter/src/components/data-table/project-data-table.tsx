@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Table,
@@ -11,6 +12,7 @@ import {
 export interface Project {
   id: string;
   name: string;
+  qrTypeLabel: string;
   qrImage: string;
   expireAt: string;
   expired: boolean;
@@ -33,6 +35,7 @@ export const ProjectDataTable = ({
   onToggleExpiredSort,
   toolbar,
 }: ProjectDataTableProps) => {
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   // Animation variants for table rows
   const rowVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -100,18 +103,24 @@ export const ProjectDataTable = ({
                   className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                 >
                   {visibleColumns.has("name") && (
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium max-w-xs truncate">
                       {project.name}
                     </TableCell>
                   )}
 
+                  {visibleColumns.has("qrTypeLabel") && (
+                    <TableCell>{project.qrTypeLabel}</TableCell>
+                  )}
+
                   {visibleColumns.has("qrImage") && (
                     <TableCell>
-                      <img
-                        src={project.qrImage}
-                        alt={project.name}
-                        className="h-14 w-14 rounded-md border object-cover"
-                      />
+                      <button
+                        type="button"
+                        className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
+                        onClick={() => setPreviewSrc(project.qrImage)}
+                      >
+                        查看二维码
+                      </button>
                     </TableCell>
                   )}
 
@@ -144,6 +153,38 @@ export const ProjectDataTable = ({
           </TableBody>
         </Table>
       </div>
+      {previewSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setPreviewSrc(null)}
+        >
+          <div
+            className="max-w-lg w-full mx-4 rounded-2xl bg-white dark:bg-neutral-900 p-4 shadow-2xl border border-border/70 flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-neutral-900 dark:text-neutral-50">
+                二维码预览
+              </span>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-sm text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"
+                onClick={() => setPreviewSrc(null)}
+                aria-label="关闭"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex items-center justify-center">
+              <img
+                src={previewSrc}
+                alt="二维码预览"
+                className="max-h-[360px] rounded-lg border object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

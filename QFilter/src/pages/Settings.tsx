@@ -7,7 +7,62 @@ interface ModelConfig {
   api_url: string;
   model_name: string;
   api_key: string;
+  prompt: string;
 }
+
+const DEFAULT_PROMPT = `你是二维码页面信息结构化提取助手。
+
+必须严格按步骤执行。
+
+--------------------------------
+第一步：提取有效期
+
+有效期通常位于二维码下方,图片底部的灰色小字区域。
+
+请重点检查二维码下方,图片底部的灰色小字区域的文字。
+
+1. 读取图片全部文字（包括灰色小字）。
+2. 查找包含“7天内”“七天内”“有效”“前”“截止”等关键词的句子。
+3. 在该句中查找括号日期，格式可能为：
+   (X月X日前)
+   （X月X日前）
+   (X月X日)
+   （X月X日）
+
+4. 如果存在括号日期：
+   - 提取 X月X日
+   - 去除“前”
+   - 默认年份为今年
+   - 必须转换为 YYYY-MM-DD 格式
+   - 如果无法转换为 YYYY-MM-DD，则 expire = null
+
+5. 如果没有括号日期：
+   expire = null
+
+⚠️ expire 字段最终必须是 YYYY-MM-DD 格式或 null
+⚠️ 不允许输出 “3月9日前” 这种格式
+⚠️ 不允许根据7天自行推算
+
+--------------------------------
+第二步：提取名称
+
+1. 识别二维码上方最大字号标题文本。
+2. 如果标题包含以下前缀，必须删除前缀后再输出：
+   - 群聊:
+   - 群聊：
+3. 输出的 name 字段不得包含：
+   - “群聊”
+   - 冒号 “:” 或 “：” 开头形式
+4. 只输出真实名称本身。
+5. 不得包含任何前缀或说明性文字。
+
+--------------------------------
+仅返回 JSON：
+
+{
+  "name": "",
+  "expire": ""
+}`;
 
 export function Settings() {
   const { t } = useTranslation();
@@ -16,6 +71,7 @@ export function Settings() {
     api_url: "",
     model_name: "",
     api_key: "",
+    prompt: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -27,7 +83,6 @@ export function Settings() {
         )) as ModelConfig | null;
         if (existing) {
           setForm(existing);
-          success(t("settings.loadSuccess", "已加载上次保存的配置"));
         }
       } catch (error: any) {
         console.error("load_model_config error", error);
@@ -110,6 +165,32 @@ export function Settings() {
               placeholder={t(
                 "settings.apiKeyPlaceholder",
                 "粘贴你的密钥",
+              )}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-neutral-700 dark:text-neutral-200">
+                {t("settings.promptLabel", "提示词设置")}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((prev) => ({ ...prev, prompt: DEFAULT_PROMPT }))
+                }
+                className="inline-flex items-center justify-center rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+              >
+                {t("settings.useDefaultPrompt", "使用默认提示词")}
+              </button>
+            </div>
+            <textarea
+              className="mt-1 min-h-[140px] rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 shadow-sm outline-none focus:border-neutral-500 focus:ring-1 focus:ring-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-50"
+              value={form.prompt}
+              onChange={(e) => handleChange("prompt", e.target.value)}
+              placeholder={t(
+                "settings.promptPlaceholder",
+                "在这里输入用于解析二维码页面的提示词……",
               )}
             />
           </label>

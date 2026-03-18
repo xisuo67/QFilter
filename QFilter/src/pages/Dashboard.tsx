@@ -6,26 +6,20 @@ import {
   ProjectDataTable,
 } from "@/components/data-table/project-data-table";
 import { Button as UploadButton } from "@/components/uoload/button";
+import type { UploadedImagePayload } from "@/components/uoload/use-image-upload";
+import { invoke } from "@tauri-apps/api/core";
 
-const mockProjects: Project[] = [
-  {
-    id: "proj-01",
-    name: "微信群 1",
-    qrImage: "https://images.pexels.com/photos/1051075/pexels-photo-1051075.jpeg",
-    expireAt: "2025-12-31 23:59",
-    expired: false,
-  },
-  {
-    id: "proj-02",
-    name: "微信群 2",
-    qrImage: "https://images.pexels.com/photos/1308746/pexels-photo-1308746.jpeg",
-    expireAt: "2024-12-31 23:59",
-    expired: true,
-  },
-];
+type QrRecord = Project & {
+  qrImageRemote: string;
+  validQr: boolean;
+  ocrStatus: "pending" | "done" | "failed";
+  qrUrl?: string | null;
+  qrType?: string | null;
+};
 
 const allColumns: (keyof Project)[] = [
   "name",
+  "qrTypeLabel",
   "qrImage",
   "expireAt",
   "expired",
@@ -33,23 +27,24 @@ const allColumns: (keyof Project)[] = [
 
 export function Dashboard() {
   const { t } = useTranslation();
-  const [hasImages, setHasImages] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [visibleColumns] = useState<Set<keyof Project>>(
     () => new Set(allColumns),
   );
+  const [records, setRecords] = useState<QrRecord[]>([]);
   const [expiredFilter, setExpiredFilter] = useState<"all" | "expired" | "active">("all");
   const [expiredSort, setExpiredSort] = useState<"none" | "asc" | "desc">("none");
 
   const tableHeaders: { key: keyof Project; label: string }[] = [
     { key: "name", label: t("dashboard.name", "名称") },
+    { key: "qrTypeLabel", label: t("dashboard.qrType", "类型") },
     { key: "qrImage", label: t("dashboard.qrImage", "二维码") },
     { key: "expireAt", label: t("dashboard.expireAt", "有效期") },
     { key: "expired", label: t("dashboard.expired", "是否过期") },
   ];
 
   const filteredProjects = useMemo(() => {
-    let list = [...mockProjects];
+    let list = records.filter((p) => p.validQr);
 
     if (expiredFilter !== "all") {
       list = list.filter((p) =>
@@ -65,7 +60,7 @@ export function Dashboard() {
     }
 
     return list;
-  }, [expiredFilter, expiredSort]);
+  }, [records, expiredFilter, expiredSort]);
 
   const handleExportCsv = () => {
     const rows = filteredProjects.map((p) => ({
@@ -100,18 +95,199 @@ export function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
-  const handleUploaded = () => {
-    setHasImages(true);
+  const handleUploaded = async ({ file, localUrl }: UploadedImagePayload) => {
     setShowUploadDialog(false);
+
+    try {
+      // 1. 先把本地文件读成字节数组，发给后端 Rust 用 rxing 识别二维码并校验域名
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(arrayBuffer));
+
+      const qrCheck = await invoke<{
+        valid: boolean;
+        url: string | null;
+        qr_type: string | null;
+        message: string | null;
+      }>("validate_qr", { image: bytes });
+
+      if (!qrCheck.valid) {
+        // 本地二维码解析失败或不在白名单域名内，只计入无效图片
+        setRecords((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            name: qrCheck.message || "无效二维码",
+            qrTypeLabel: "",
+            qrImage: localUrl,
+            qrImageRemote: "",
+            expireAt: "",
+            expired: false,
+            validQr: false,
+            ocrStatus: "failed",
+            qrUrl: qrCheck.url,
+            qrType: qrCheck.qr_type,
+          } as QrRecord,
+        ]);
+        return;
+      }
+
+      // 2. 先把符合规范的二维码直接放入列表，标记为 pending（名称暂用 URL 或“识别中…”）
+      const recordId = crypto.randomUUID();
+      setRecords((prev) => [
+        ...prev,
+        {
+          id: recordId,
+          name: qrCheck.url || "识别中…",
+          qrTypeLabel:
+            qrCheck.qr_type === "work_weixin"
+              ? "企业微信"
+              : qrCheck.qr_type === "weixin"
+                ? "微信群"
+                : qrCheck.qr_type === "wechat"
+                  ? "个人微信"
+                  : qrCheck.qr_type === "dingtalk"
+                    ? "钉钉"
+                    : qrCheck.qr_type === "feishu"
+                      ? "飞书"
+                      : "未知",
+          qrImage: localUrl,
+          qrImageRemote: "",
+          expireAt: "",
+          expired: false,
+          validQr: true,
+          ocrStatus: "pending",
+          qrUrl: qrCheck.url,
+          qrType: qrCheck.qr_type,
+        } as QrRecord,
+      ]);
+
+      // 3. 异步执行 OSS 上传 + OCR，完成后更新这条记录
+      try {
+        // TODO: 替换为你实际的 OSS 上传接口
+        const ossUrl = await (async () => {
+          // const formData = new FormData();
+          // formData.append("file", file);
+          // const res = await fetch("/api/upload", { method: "POST", body: formData });
+          // const data = await res.json();
+          // return data.url as string;
+          return Promise.resolve(
+            "https://your-oss-url.example.com/path/to/image.jpg",
+          );
+        })();
+
+        // TODO: 替换为你实际的 OCR 服务
+        const res = await fetch("http://localhost:8080/api/v1/ocr/qr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_url: ossUrl }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`识别服务错误: ${res.status}`);
+        }
+
+        const data = (await res.json()) as {
+          success: boolean;
+          message?: string;
+          type?: string;
+          name?: string;
+          expire?: string;
+          qrcode_url?: string;
+        };
+
+        const today = new Date();
+
+        if (!data.success || !data.type) {
+          // OCR 失败：只更新状态和远程地址，保留原占位名称
+          setRecords((prev) =>
+            prev.map((r) =>
+              r.id === recordId
+                ? {
+                    ...r,
+                    qrImageRemote: ossUrl,
+                    ocrStatus: "failed",
+                  }
+                : r,
+            ),
+          );
+          return;
+        }
+
+        let expireAt = data.expire || "";
+        let expired = false;
+
+        if (expireAt) {
+          const d = new Date(expireAt);
+          if (!Number.isNaN(d.getTime())) {
+            const todayZero = new Date(
+              today.getFullYear(),
+              today.getMonth(),
+              today.getDate(),
+            );
+            expired = d.getTime() < todayZero.getTime();
+          } else {
+            expireAt = "";
+          }
+        }
+
+        // OCR 成功：更新这条记录的名称/有效期/过期状态/远程地址/状态
+        setRecords((prev) =>
+          prev.map((r) =>
+            r.id === recordId
+              ? {
+                  ...r,
+                  name: data.name || r.name,
+                  qrImageRemote: ossUrl,
+                  expireAt,
+                  expired,
+                  ocrStatus: "done",
+                }
+              : r,
+          ),
+        );
+      } catch (err) {
+        console.error("OCR flow error", err);
+        setRecords((prev) =>
+          prev.map((r) =>
+            r.id === recordId ? { ...r, ocrStatus: "failed" } : r,
+          ),
+        );
+      }
+    } catch (e) {
+      console.error("handleUploaded error", e);
+      setRecords((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          name: "识别失败",
+          qrTypeLabel: "",
+          qrImage: localUrl,
+          qrImageRemote: "",
+          expireAt: "",
+          expired: false,
+          validQr: false,
+          ocrStatus: "failed",
+        } as QrRecord,
+      ]);
+    }
   };
 
   const handleClear = () => {
-    setHasImages(false);
+    setRecords([]);
   };
 
+  const totalImages = records.length;
+  const totalValid = records.filter((r) => r.validQr).length;
+  const totalInvalid = totalImages - totalValid;
+  const totalNotExpired = records.filter(
+    (r) => r.validQr && !r.expired,
+  ).length;
+
+  const hasImages = records.length > 0;
+
   return (
-    <div className="flex flex-1">
-      <div className="p-4 md:p-8 rounded-tl-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col gap-4 flex-1 w-full h-full">
+    <div className="flex flex-1 min-h-0">
+      <div className="p-4 md:p-8 rounded-tl-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col gap-4 flex-1 w-full h-full min-h-0 overflow-hidden">
         <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">
           {t("dashboard.title")}
         </h1>
@@ -125,7 +301,7 @@ export function Dashboard() {
               总图片
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? mockProjects.length : 0}
+              {totalImages}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-800 px-4 py-3">
@@ -133,7 +309,7 @@ export function Dashboard() {
               含二维码
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? mockProjects.length : 0}
+              {totalValid}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-800 px-4 py-3">
@@ -141,7 +317,7 @@ export function Dashboard() {
               无效图片
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              0
+              {totalInvalid}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-800 px-4 py-3">
@@ -149,12 +325,12 @@ export function Dashboard() {
               未过期
             </div>
             <div className="mt-1 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
-              {hasImages ? mockProjects.length : 0}
+              {totalNotExpired}
             </div>
           </div>
         </div>
 
-        <div className="mt-4 flex-1 flex flex-col">
+        <div className="mt-4 flex-1 flex flex-col min-h-0">
           {!hasImages ? (
             <div className="flex flex-1">
               <QrUploadPanel
@@ -164,7 +340,7 @@ export function Dashboard() {
               />
             </div>
           ) : (
-              <div className="flex-1 flex flex-col gap-4">
+            <div className="flex-1 flex flex-col gap-4 min-h-0">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-50">
@@ -227,17 +403,19 @@ export function Dashboard() {
                 </div>
               </div>
 
-              <ProjectDataTable
-                projects={filteredProjects}
-                visibleColumns={visibleColumns}
-                headers={tableHeaders}
-                expiredSort={expiredSort}
-                onToggleExpiredSort={() =>
-                  setExpiredSort((prev) =>
-                    prev === "none" ? "asc" : prev === "asc" ? "desc" : "none",
-                  )
-                }
-              />
+              <div className="flex-1 min-h-0 overflow-auto">
+                <ProjectDataTable
+                  projects={filteredProjects}
+                  visibleColumns={visibleColumns}
+                  headers={tableHeaders}
+                  expiredSort={expiredSort}
+                  onToggleExpiredSort={() =>
+                    setExpiredSort((prev) =>
+                      prev === "none" ? "asc" : prev === "asc" ? "desc" : "none",
+                    )
+                  }
+                />
+              </div>
             </div>
           )}
         </div>

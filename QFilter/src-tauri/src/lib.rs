@@ -1,11 +1,19 @@
 use anyhow::{anyhow, Result};
+use image::DynamicImage;
+use rxing::helpers;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Pool, Row, Sqlite,
 };
-use std::{path::PathBuf, str::FromStr, sync::OnceLock};
+use std::{
+    path::PathBuf,
+    str::FromStr,
+    sync::OnceLock,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::Manager;
+use url::Url;
 
 static DB_POOL: OnceLock<Pool<Sqlite>> = OnceLock::new();
 static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -15,6 +23,131 @@ struct ModelConfig {
     api_url: String,
     model_name: String,
     api_key: String,
+    prompt: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidateQrResult {
+    valid: bool,
+    url: Option<String>,
+    qr_type: Option<String>,
+    message: Option<String>,
+}
+
+const ALLOWED_QR_HOST_SUFFIXES: &[(&str, &str)] = &[
+    ("work.weixin.qq.com", "work_weixin"),
+    ("weixin.qq.com", "weixin"),
+    ("u.wechat.com", "wechat"),
+    ("dingtalk.com", "dingtalk"),
+    ("feishu.cn", "feishu"),
+];
+
+fn parse_qr_url_type(raw_url: &str) -> Option<String> {
+    let trimmed = raw_url.trim();
+    let parsed = Url::parse(trimmed).ok()?;
+    let mut host = parsed.host_str()?.to_lowercase();
+
+    if let Some(idx) = host.find(':') {
+        host = host[..idx].to_string();
+    }
+
+    for (suffix, typ) in ALLOWED_QR_HOST_SUFFIXES {
+        if host == *suffix || host.ends_with(&format!(".{suffix}")) {
+            return Some((*typ).to_string());
+        }
+    }
+
+    None
+}
+
+#[tauri::command]
+async fn validate_qr(image: Vec<u8>) -> Result<ValidateQrResult, String> {
+    // 先把内存中的图片写入临时文件，交给 rxing 按文件路径识别
+    let app_dir = APP_DATA_DIR
+        .get()
+        .ok_or_else(|| "app data dir not set".to_string())?
+        .clone();
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("time error: {e}"))?
+        .as_nanos();
+    let tmp_path = app_dir.join(format!("qf_tmp_qr_{nanos}.png"));
+
+    // 解码再用 image 保存成 png，保证格式稳定
+    let dyn_img: DynamicImage = image::load_from_memory(&image)
+        .map_err(|e| {
+            eprintln!("[validate_qr] image decode error: {e}");
+            format!("image decode error: {e}")
+        })?;
+    if let Err(e) = dyn_img.save(&tmp_path) {
+        eprintln!(
+            "[validate_qr] image save error at {:?}: {e}",
+            &tmp_path
+        );
+        return Err(format!("image save error: {e}"));
+    }
+
+    // 使用 rxing helpers 按文件识别二维码
+    let results = helpers::detect_multiple_in_file(
+        tmp_path
+            .to_str()
+            .ok_or_else(|| "invalid temp path".to_string())?,
+    )
+    .map_err(|e| {
+        eprintln!(
+            "[validate_qr] rxing decode error on file {:?}: {e}",
+            &tmp_path
+        );
+        format!("rxing decode error: {e}")
+    })?;
+
+    // 用完即删
+    let _ = std::fs::remove_file(&tmp_path);
+
+    let first = match results.first() {
+        Some(r) => r,
+        None => {
+            eprintln!("[validate_qr] no QR code detected from {:?}", &tmp_path);
+            return Ok(ValidateQrResult {
+                valid: false,
+                url: None,
+                qr_type: None,
+                message: Some("未识别到二维码".to_string()),
+            })
+        }
+    };
+
+    let content = first.getText();
+    println!(
+        "[validate_qr] decoded QR content: {} (format: {:?})",
+        content,
+        first.getBarcodeFormat()
+    );
+
+    if let Some(qr_type) = parse_qr_url_type(&content) {
+        println!(
+            "[validate_qr] QR URL passed whitelist: type = {}, url = {}",
+            qr_type, content
+        );
+        Ok(ValidateQrResult {
+            valid: true,
+            url: Some(content.to_string()),
+            qr_type: Some(qr_type),
+            message: None,
+        })
+    } else {
+        eprintln!(
+            "[validate_qr] QR URL not in whitelist: {}",
+            content
+        );
+        Ok(ValidateQrResult {
+            valid: false,
+            url: Some(content.to_string()),
+            qr_type: None,
+            message: Some("二维码链接不在允许的范围内".to_string()),
+        })
+    }
 }
 
 async fn init_db() -> Result<Pool<Sqlite>> {
@@ -71,17 +204,19 @@ async fn save_model_config(config: ModelConfig) -> Result<(), String> {
 
     sqlx::query::<Sqlite>(
         r#"
-        INSERT INTO model_settings (id, api_url, model_name, api_key)
-        VALUES (1, ?, ?, ?)
+        INSERT INTO model_settings (id, api_url, model_name, api_key, prompt)
+        VALUES (1, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             api_url = excluded.api_url,
             model_name = excluded.model_name,
-            api_key = excluded.api_key;
+            api_key = excluded.api_key,
+            prompt = excluded.prompt;
         "#,
     )
     .bind(&config.api_url)
     .bind(&config.model_name)
     .bind(&config.api_key)
+    .bind(&config.prompt)
     .execute(&pool)
     .await
     .map_err(|e| format!("db write error: {}", e))?;
@@ -97,7 +232,7 @@ async fn load_model_config() -> Result<Option<ModelConfig>, String> {
 
     let row = sqlx::query(
         r#"
-        SELECT api_url, model_name, api_key
+        SELECT api_url, model_name, api_key, prompt
         FROM model_settings
         WHERE id = 1
         "#,
@@ -110,6 +245,7 @@ async fn load_model_config() -> Result<Option<ModelConfig>, String> {
         api_url: r.get("api_url"),
         model_name: r.get("model_name"),
         api_key: r.get("api_key"),
+        prompt: r.get("prompt"),
     }))
 }
 
@@ -126,7 +262,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             save_model_config,
-            load_model_config
+            load_model_config,
+            validate_qr
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

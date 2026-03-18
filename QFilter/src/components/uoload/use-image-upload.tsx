@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export interface UploadedImagePayload {
+  file: File;
+  localUrl: string;
+}
+
 interface UseImageUploadProps {
-  onUpload?: (url: string) => void;
+  onUpload?: (payload: UploadedImagePayload) => void;
 }
 
 export function useImageUpload({ onUpload }: UseImageUploadProps = {}) {
@@ -16,14 +21,23 @@ export function useImageUpload({ onUpload }: UseImageUploadProps = {}) {
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        setFileName(file.name);
-        const url = URL.createObjectURL(file);
-        setPreviewUrl(url);
-        previewRef.current = url;
-        onUpload?.(url);
+      const files = Array.from(event.target.files ?? []);
+      if (files.length === 0) {
+        return;
       }
+
+      files.forEach((file, index) => {
+        const url = URL.createObjectURL(file);
+
+        // 只用第一张图更新预览和文件名，其余只触发上传逻辑即可
+        if (index === 0) {
+          setFileName(file.name);
+          setPreviewUrl(url);
+          previewRef.current = url;
+        }
+
+        onUpload?.({ file, localUrl: url });
+      });
     },
     [onUpload],
   );

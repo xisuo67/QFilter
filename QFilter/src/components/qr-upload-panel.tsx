@@ -2,11 +2,14 @@ import { useState, useCallback } from "react";
 import type React from "react";
 import { ImagePlus } from "lucide-react";
 import { Input } from "@/components/uoload/input";
-import { useImageUpload } from "@/components/uoload/use-image-upload";
+import {
+  useImageUpload,
+  type UploadedImagePayload,
+} from "@/components/uoload/use-image-upload";
 import { cn } from "@/lib/utils";
 
 interface QrUploadPanelProps {
-  onUploaded: () => void;
+  onUploaded?: (payload: UploadedImagePayload) => void;
   className?: string;
   /** 在弹窗中使用内部虚线边框；在页面大容器中可以关掉内部虚线，仅用外层虚线 */
   useInnerDashed?: boolean;
@@ -21,8 +24,8 @@ export function QrUploadPanel({
 
   const { fileInputRef, handleThumbnailClick, handleFileChange } =
     useImageUpload({
-      onUpload: () => {
-        onUploaded();
+      onUpload: (payload) => {
+        onUploaded?.(payload);
       },
     });
 

@@ -1,0 +1,3 @@
+ALTER TABLE model_settings
+ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+
