@@ -15,6 +15,7 @@ export interface Project {
   qrTypeLabel: string;
   qrImage: string;
   qrImageRemote?: string;
+  qrUrl?: string | null;
   expireAt: string;
   expired: boolean | null;
 }
@@ -138,6 +139,23 @@ export const ProjectDataTable = ({
                       >
                         查看二维码
                       </button>
+                    </TableCell>
+                  )}
+
+                  {visibleColumns.has("qrUrl") && (
+                    <TableCell>
+                      {project.qrUrl ? (
+                        <a
+                          href={project.qrUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary underline underline-offset-4 hover:text-primary/80 block max-w-xs truncate"
+                        >
+                          {project.qrUrl}
+                        </a>
+                      ) : (
+                        <span className="text-neutral-400 dark:text-neutral-500">-</span>
+                      )}
                     </TableCell>
                   )}
 

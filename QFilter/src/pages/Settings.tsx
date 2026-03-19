@@ -32,14 +32,13 @@ const DEFAULT_PROMPT = `你是二维码页面信息结构化提取助手。
 4. 如果存在括号日期：
    - 提取 X月X日
    - 去除“前”
-   - 默认年份为今年
-   - 必须转换为 YYYY-MM-DD 格式
-   - 如果无法转换为 YYYY-MM-DD，则 expire = null
+   - 必须转换为 MM-DD 格式
+   - 如果无法转换为 MM-DD，则 expire = null
 
 5. 如果没有括号日期：
    expire = null
 
-⚠️ expire 字段最终必须是 YYYY-MM-DD 格式或 null
+⚠️ expire 字段最终必须是 MM-DD 格式或 null
 ⚠️ 不允许输出 “3月9日前” 这种格式
 ⚠️ 不允许根据7天自行推算
 

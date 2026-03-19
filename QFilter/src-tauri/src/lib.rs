@@ -13,6 +13,7 @@ use std::{
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
+use chrono::{Datelike, Utc};
 use tauri::Manager;
 use url::Url;
 
@@ -37,6 +38,7 @@ struct ValidateQrResult {
 
 const ALLOWED_QR_HOST_SUFFIXES: &[(&str, &str)] = &[
     ("work.weixin.qq.com", "work_weixin"),
+    ("weixin.com", "work_weixin"),
     ("weixin.qq.com", "weixin"),
     ("u.wechat.com", "wechat"),
     ("dingtalk.com", "dingtalk"),
@@ -201,11 +203,8 @@ async fn get_pool() -> Result<Pool<Sqlite>> {
 struct OcrResult {
     success: bool,
     message: Option<String>,
-    #[serde(rename = "type")]
-    ocr_type: Option<String>,
     name: Option<String>,
     expire: Option<String>,
-    qrcode_url: Option<String>,
 }
 
 #[tauri::command]
@@ -295,11 +294,25 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| "OCR 响应中缺少 message.content 字段".to_string())?;
 
-    // content_text 应该是一个 JSON 字符串，按 Settings 里配置的 prompt 返回
-    let parsed: Value =
-        serde_json::from_str(content_text).map_err(|e| {
-            format!("解析 OCR 内容为 JSON 失败: {e}, content: {content_text}")
-        })?;
+    // content_text 应该是一个 JSON 字符串（但有些模型会返回 ```json ... ``` 代码块）
+    // 这里先剔除代码块围栏，再解析 JSON。
+    let mut content_clean = content_text.trim().to_string();
+    if content_clean.starts_with("```") {
+        // 去掉首行 ```json / ```（以及首行之后的换行）
+        if let Some(first_newline) = content_clean.find('\n') {
+            content_clean = content_clean[first_newline + 1..].trim().to_string();
+        }
+        // 去掉末尾 ```（若存在）
+        if let Some(last_fence) = content_clean.rfind("```") {
+            content_clean = content_clean[..last_fence].trim().to_string();
+        }
+    }
+
+    let parsed: Value = serde_json::from_str(&content_clean).map_err(|e| {
+        format!(
+            "解析 OCR 内容为 JSON 失败: {e}, content: {content_text}"
+        )
+    })?;
 
     let name = parsed
         .get("name")
@@ -308,23 +321,74 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
     let expire = parsed
         .get("expire")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let qrcode_url = parsed
-        .get("qrcode_url")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let ocr_type = parsed
-        .get("type")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .and_then(|raw| {
+            let s = raw.trim();
+            if s.is_empty() || s.eq_ignore_ascii_case("null") {
+                return None;
+            }
+
+            // Helper: parse leading integer from a string segment.
+            fn leading_int(seg: &str) -> Option<u32> {
+                let mut started = false;
+                let mut val: u32 = 0;
+                for c in seg.chars() {
+                    if c.is_ascii_digit() {
+                        started = true;
+                        val = val * 10 + (c as u32 - '0' as u32);
+                    } else if started {
+                        break;
+                    }
+                }
+                if started { Some(val) } else { None }
+            }
+
+            // Case 1: YYYY-MM-DD
+            if s.contains('-') {
+                let parts: Vec<&str> = s.split('-').collect();
+                if parts.len() == 3 {
+                    if let (Some(y), Some(m), Some(d)) = (
+                        leading_int(parts[0]),
+                        leading_int(parts[1]),
+                        leading_int(parts[2]),
+                    ) {
+                        return Some(format!("{:04}-{:02}-{:02}", y, m, d));
+                    }
+                }
+
+                // Case 2: M-D / MM-DD (or with suffix like "03-09日前")
+                if parts.len() == 2 {
+                    if let (Some(m), Some(d)) = (
+                        leading_int(parts[0]),
+                        leading_int(parts[1]),
+                    ) {
+                        let year = Utc::now().year();
+                        return Some(format!("{:04}-{:02}-{:02}", year, m, d));
+                    }
+                }
+            }
+
+            // Case 3: M月D日 / MM月DD日 (or with suffix like "3月9日前")
+            if s.contains('月') && s.contains('日') {
+                let month_part = s.split('月').next().unwrap_or("");
+                let after_month = s.split('月').nth(1).unwrap_or("");
+                let day_part = after_month.split('日').next().unwrap_or("");
+                if let (Some(m), Some(d)) = (
+                    leading_int(month_part),
+                    leading_int(day_part),
+                ) {
+                    let year = Utc::now().year();
+                    return Some(format!("{:04}-{:02}-{:02}", year, m, d));
+                }
+            }
+
+            None
+        });
 
     Ok(OcrResult {
         success: true,
         message: None,
-        ocr_type,
         name,
         expire,
-        qrcode_url,
     })
 }
 

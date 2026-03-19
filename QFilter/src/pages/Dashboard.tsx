@@ -22,6 +22,7 @@ const allColumns: (keyof Project)[] = [
   "name",
   "qrTypeLabel",
   "qrImage",
+  "qrUrl",
   "expireAt",
   "expired",
 ];
@@ -42,6 +43,7 @@ export function Dashboard() {
     { key: "name", label: t("dashboard.name", "名称") },
     { key: "qrTypeLabel", label: t("dashboard.qrType", "类型") },
     { key: "qrImage", label: t("dashboard.qrImage", "二维码") },
+    { key: "qrUrl", label: t("dashboard.qrUrl", "二维码链接") },
     { key: "expireAt", label: t("dashboard.expireAt", "有效期") },
     { key: "expired", label: t("dashboard.expired", "是否过期") },
   ];
@@ -104,9 +106,9 @@ export function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
-  const uploadToQiniu = async (file: File): Promise<string> => {
+  const uploadToQiniu = async (file: File,qr_type: string): Promise<string> => {
     const tokenResp = await fetch(
-      "http://localhost:8888/base/qiniuUploadToken",
+      "https://wechatmanage.xisuo67.website/api/base/qiniuUploadToken",
     );
     if (!tokenResp.ok) {
       throw new Error(`获取七牛上传凭证失败: ${tokenResp.status}`);
@@ -125,7 +127,7 @@ export function Dashboard() {
     }
 
     const { keyPrefix, uploadToken,cdnDomain } = tokenJson.data;
-    const key = `${keyPrefix}/${file.name}`;
+    const key = `${keyPrefix}/${qr_type}/${file.name}`;
     const putExtra: Record<string, unknown> = {};
     const config: Record<string, unknown> = {};
 
@@ -136,7 +138,7 @@ export function Dashboard() {
           next() {
             // 可以在这里更新进度条
           },
-          error(err) {
+          error(err: unknown) {
             reject(err);
           },
           complete(res: { key?: string }) {
@@ -161,7 +163,7 @@ export function Dashboard() {
         qr_type: string | null;
         message: string | null;
       }>("validate_qr", { image: bytes });
-
+      debugger;
       if (!qrCheck.valid) {
         // 本地二维码解析失败或不在白名单域名内，只计入无效图片
         setRecords((prev) => [
@@ -216,20 +218,20 @@ export function Dashboard() {
       // 3. 异步执行七牛上传（因为ocr服务需要网络图片，所以只能先上传到七牛云） + OCR，完成后更新这条记录
       try {
         //由于不想暴露私人密钥，通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
-        const ossUrl = await uploadToQiniu(file);
+        const ossUrl = await uploadToQiniu(
+          file,
+          qrCheck.qr_type ?? "unknown",
+        );
 
         const data = await invoke<{
           success: boolean;
           message?: string;
-          type?: string;
           name?: string;
           expire?: string;
-          qrcode_url?: string;
         }>("ocr_qr", { imageUrl: ossUrl });
-        debugger;
         const today = new Date();
-
-        if (!data.success || !data.type) {
+        debugger;
+        if (!data.success) {
           // OCR 失败：只更新状态和远程地址，保留原占位名称
           setRecords((prev) =>
             prev.map((r) =>
