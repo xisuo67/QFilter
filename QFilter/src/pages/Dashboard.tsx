@@ -18,6 +18,9 @@ import {
   useModal,
 } from "@/components/dialog/animated-modal";
 import { motion } from "framer-motion";
+import wechatBg from "@/assets/wechat_bg.jpg";
+import wechat from "@/assets/wechat.jpg";
+
 
 type QrRecord = Project & {
   qrImageRemote: string;
@@ -94,14 +97,9 @@ const ExportCsvModal = ({
           <h4 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50 mb-3">
             立刻导出 CSV 文件
           </h4>
-          {/* 顶部图片带，严格参考原始 demo 的布局与动画 */}
           <div className="flex justify-center items-center">
-            {[
-              "https://images.unsplash.com/photo-1517322048670-4fba75cbbb62?q=80&w=3000&auto=format&fit=crop",
-              "https://images.unsplash.com/photo-1573790387438-4da905039392?q=80&w=3425&auto=format&fit=crop",
-              "https://images.unsplash.com/photo-1554931670-4ebfabf6e7a9?q=80&w=3540&auto=format&fit=crop",
-              "https://images.unsplash.com/photo-1555400038-63f5ba517a47?q=80&w=3540&auto=format&fit=crop",
-              "https://images.unsplash.com/photo-1546484475-7f7bd55792da?q=80&w=2581&auto=format&fit=crop",
+            {[ wechatBg,
+               wechat,
             ].map((src, idx) => (
               <motion.div
                 key={"images" + idx}
@@ -130,22 +128,24 @@ const ExportCsvModal = ({
           </div>
 
           {/* 中部信息区：图标 + 文本列表，贴近原型布局 */}
-          <div className="py-2 flex flex-col gap-2 text-sm text-neutral-700 dark:text-neutral-200">
-            <div className="flex items-center gap-2">
-              <span className="text-xs">🖼️</span>
-              <span>此次总上传图片：{totalImages}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs">📷</span>
-              <span>含二维码：{totalValid}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs">🚫</span>
-              <span>无效图片：{totalInvalid}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs">⏰</span>
-              <span>未过期：{totalNotExpired}</span>
+          <div className="py-2 text-sm text-neutral-700 dark:text-neutral-200">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs">🖼️</span>
+                <span>此次总上传图片：{totalImages}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs">📷</span>
+                <span>含二维码：{totalValid}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs">🚫</span>
+                <span>无效图片：{totalInvalid}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs">⏰</span>
+                <span>未过期：{totalNotExpired}</span>
+              </div>
             </div>
             <div className="flex items-start gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
               <span className="mt-0.5">💾</span>
