@@ -9,6 +9,15 @@ import { Button as UploadButton } from "@/components/uoload/button";
 import type { UploadedImagePayload } from "@/components/uoload/use-image-upload";
 import { invoke } from "@tauri-apps/api/core";
 import * as qiniu from "qiniu-js";
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalTrigger,
+  useModal,
+} from "@/components/dialog/animated-modal";
+import { motion } from "framer-motion";
 
 type QrRecord = Project & {
   qrImageRemote: string;
@@ -26,6 +35,135 @@ const allColumns: (keyof Project)[] = [
   "expireAt",
   "expired",
 ];
+
+interface ExportCsvFooterProps {
+  onConfirm: () => void;
+}
+
+const ExportCsvFooter = ({ onConfirm }: ExportCsvFooterProps) => {
+  const { setOpen } = useModal();
+
+  const handleConfirm = () => {
+    onConfirm();
+    setOpen(false);
+  };
+
+  return (
+    <ModalFooter className="gap-3">
+      <UploadButton
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen(false)}
+      >
+        取消
+      </UploadButton>
+      <UploadButton
+        variant="outline"
+        size="sm"
+        onClick={handleConfirm}
+      >
+        确认导出
+      </UploadButton>
+    </ModalFooter>
+  );
+};
+
+interface ExportCsvModalProps {
+  onConfirm: () => void;
+  totalImages: number;
+  totalValid: number;
+  totalInvalid: number;
+  totalNotExpired: number;
+}
+
+const ExportCsvModal = ({
+  onConfirm,
+  totalImages,
+  totalValid,
+  totalInvalid,
+  totalNotExpired,
+}: ExportCsvModalProps) => {
+
+  return (
+    <Modal>
+      <ModalTrigger className="px-3 py-1.5 text-xs rounded-md border border-neutral-300 bg-white text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+        导出 CSV
+      </ModalTrigger>
+      <ModalBody>
+        <ModalContent>
+          <h4 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50 mb-3">
+            立刻导出 CSV 文件
+          </h4>
+          {/* 顶部图片带，严格参考原始 demo 的布局与动画 */}
+          <div className="flex justify-center items-center">
+            {[
+              "https://images.unsplash.com/photo-1517322048670-4fba75cbbb62?q=80&w=3000&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1573790387438-4da905039392?q=80&w=3425&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1554931670-4ebfabf6e7a9?q=80&w=3540&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1555400038-63f5ba517a47?q=80&w=3540&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1546484475-7f7bd55792da?q=80&w=2581&auto=format&fit=crop",
+            ].map((src, idx) => (
+              <motion.div
+                key={"images" + idx}
+                style={{
+                  rotate: Math.random() * 20 - 10,
+                }}
+                whileHover={{
+                  scale: 1.1,
+                  rotate: 0,
+                  zIndex: 100,
+                }}
+                whileTap={{
+                  scale: 1.1,
+                  rotate: 0,
+                  zIndex: 100,
+                }}
+                className="rounded-xl -mr-4 mt-4 p-1 bg-white dark:bg-neutral-800 dark:border-neutral-700 border border-neutral-100 flex-shrink-0 overflow-hidden"
+              >
+                <img
+                  src={src}
+                  alt="bali images"
+                  className="rounded-lg h-20 w-20 md:h-40 md:w-40 object-cover flex-shrink-0"
+                />
+              </motion.div>
+            ))}
+          </div>
+
+          {/* 中部信息区：图标 + 文本列表，贴近原型布局 */}
+          <div className="py-2 flex flex-col gap-2 text-sm text-neutral-700 dark:text-neutral-200">
+            <div className="flex items-center gap-2">
+              <span className="text-xs">🖼️</span>
+              <span>此次总上传图片：{totalImages}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">📷</span>
+              <span>含二维码：{totalValid}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">🚫</span>
+              <span>无效图片：{totalInvalid}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">⏰</span>
+              <span>未过期：{totalNotExpired}</span>
+            </div>
+            <div className="flex items-start gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+              <span className="mt-0.5">💾</span>
+              <span>
+                导出时会根据当前筛选条件生成 CSV 文件。保存前你可以在系统弹出的对话框中
+                <span className="font-semibold"> 选择导出路径 </span>
+                并
+                <span className="font-semibold"> 重命名导出文件</span>，
+                便于后续归档与分享。
+              </span>
+            </div>
+          </div>
+        </ModalContent>
+        <ExportCsvFooter onConfirm={onConfirm} />
+      </ModalBody>
+    </Modal>
+  );
+};
 
 export function Dashboard() {
   const { t } = useTranslation();
@@ -163,7 +301,6 @@ export function Dashboard() {
         qr_type: string | null;
         message: string | null;
       }>("validate_qr", { image: bytes });
-      debugger;
       if (!qrCheck.valid) {
         // 本地二维码解析失败或不在白名单域名内，只计入无效图片
         setRecords((prev) => [
@@ -230,7 +367,6 @@ export function Dashboard() {
           expire?: string;
         }>("ocr_qr", { imageUrl: ossUrl });
         const today = new Date();
-        debugger;
         if (!data.success) {
           // OCR 失败：只更新状态和远程地址，保留原占位名称
           setRecords((prev) =>
@@ -451,13 +587,13 @@ export function Dashboard() {
                   >
                     上传
                   </UploadButton>
-                  <UploadButton
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportCsv}
-                  >
-                    导出 CSV
-                  </UploadButton>
+                  <ExportCsvModal
+                    onConfirm={handleExportCsv}
+                    totalImages={totalImages}
+                    totalValid={totalValid}
+                    totalInvalid={totalInvalid}
+                    totalNotExpired={totalNotExpired}
+                  />
                   <UploadButton
                     variant="ghost"
                     size="sm"
