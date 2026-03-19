@@ -30,4 +30,5 @@ rxing = { version = "0.8.5", default-features = true, features = ["image"] }
 url = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 chrono = "0.4"
+tauri-plugin-fs = "2"
 

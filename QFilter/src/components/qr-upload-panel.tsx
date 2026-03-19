@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type React from "react";
 import { ImagePlus } from "lucide-react";
 import { Input } from "@/components/uoload/input";
@@ -7,6 +7,8 @@ import {
   type UploadedImagePayload,
 } from "@/components/uoload/use-image-upload";
 import { cn } from "@/lib/utils";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { readFile } from "@tauri-apps/plugin-fs";
 
 interface QrUploadPanelProps {
   onUploaded?: (payload: UploadedImagePayload) => void;
@@ -70,6 +72,63 @@ export function QrUploadPanel({
     },
     [handleFileChange],
   );
+
+  // 使用 Tauri WebviewWindow 的拖拽事件，支持从系统窗口直接拖拽到应用中任意位置
+  useEffect(() => {
+    const appWindow = getCurrentWebviewWindow();
+
+    const unlistenPromise = appWindow.onDragDropEvent(async (event) => {
+      const payload = event.payload as {
+        type: "enter" | "over" | "drop" | "leave" | "cancel";
+        paths: string[];
+      };
+
+      if (payload.type === "enter" || payload.type === "over") {
+        setIsDragging(true);
+        return;
+      }
+
+      if (payload.type === "leave" || payload.type === "cancel") {
+        setIsDragging(false);
+        return;
+      }
+
+      if (payload.type === "drop") {
+        setIsDragging(false);
+        const paths = payload.paths || [];
+        if (!Array.isArray(paths) || paths.length === 0) return;
+
+        const imageFiles: File[] = [];
+
+        for (const path of paths) {
+          if (!/\.(png|jpe?g|gif|bmp|webp)$/i.test(path)) continue;
+
+          try {
+            const bytes = await readFile(path);
+            const blob = new Blob([bytes], { type: "image/*" });
+            const name = path.split(/[/\\]/).pop() || "image.png";
+            const file = new File([blob], name, { type: "image/*" });
+            imageFiles.push(file);
+          } catch (e) {
+            console.error("读取拖拽文件失败", e);
+          }
+        }
+
+        if (imageFiles.length === 0) return;
+
+        const fakeEvent = {
+          target: {
+            files: imageFiles,
+          },
+        } as unknown as React.ChangeEvent<HTMLInputElement>;
+        handleFileChange(fakeEvent);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [handleFileChange]);
 
   return (
     <div

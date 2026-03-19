@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use image::DynamicImage;
 use rxing::helpers;
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,6 @@ use std::{
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
-use chrono::{Datelike, NaiveDate, Duration, Utc};
 use tauri::Manager;
 use url::Url;
 
@@ -78,16 +78,12 @@ async fn validate_qr(image: Vec<u8>) -> Result<ValidateQrResult, String> {
     let tmp_path = app_dir.join(format!("qf_tmp_qr_{nanos}.png"));
 
     // 解码再用 image 保存成 png，保证格式稳定
-    let dyn_img: DynamicImage = image::load_from_memory(&image)
-        .map_err(|e| {
-            eprintln!("[validate_qr] image decode error: {e}");
-            format!("image decode error: {e}")
-        })?;
+    let dyn_img: DynamicImage = image::load_from_memory(&image).map_err(|e| {
+        eprintln!("[validate_qr] image decode error: {e}");
+        format!("image decode error: {e}")
+    })?;
     if let Err(e) = dyn_img.save(&tmp_path) {
-        eprintln!(
-            "[validate_qr] image save error at {:?}: {e}",
-            &tmp_path
-        );
+        eprintln!("[validate_qr] image save error at {:?}: {e}", &tmp_path);
         return Err(format!("image save error: {e}"));
     }
 
@@ -117,7 +113,7 @@ async fn validate_qr(image: Vec<u8>) -> Result<ValidateQrResult, String> {
                 url: None,
                 qr_type: None,
                 message: Some("未识别到二维码".to_string()),
-            })
+            });
         }
     };
 
@@ -140,10 +136,7 @@ async fn validate_qr(image: Vec<u8>) -> Result<ValidateQrResult, String> {
             message: None,
         })
     } else {
-        eprintln!(
-            "[validate_qr] QR URL not in whitelist: {}",
-            content
-        );
+        eprintln!("[validate_qr] QR URL not in whitelist: {}", content);
         Ok(ValidateQrResult {
             valid: false,
             url: Some(content.to_string()),
@@ -263,10 +256,7 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
 
     let resp = client
         .post(&config.api_url)
-        .header(
-            "Authorization",
-            format!("Bearer {}", config.api_key),
-        )
+        .header("Authorization", format!("Bearer {}", config.api_key))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -274,10 +264,7 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
         .map_err(|e| format!("调用 OCR 接口失败: {e}"))?;
 
     if !resp.status().is_success() {
-        return Err(format!(
-            "OCR 服务返回错误状态码: {}",
-            resp.status()
-        ));
+        return Err(format!("OCR 服务返回错误状态码: {}", resp.status()));
     }
 
     // DashScope 兼容 OpenAI，假设 content 里是模型输出的 JSON 字符串
@@ -308,11 +295,8 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
         }
     }
 
-    let parsed: Value = serde_json::from_str(&content_clean).map_err(|e| {
-        format!(
-            "解析 OCR 内容为 JSON 失败: {e}, content: {content_text}"
-        )
-    })?;
+    let parsed: Value = serde_json::from_str(&content_clean)
+        .map_err(|e| format!("解析 OCR 内容为 JSON 失败: {e}, content: {content_text}"))?;
 
     let name = parsed
         .get("name")
@@ -339,7 +323,11 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                         break;
                     }
                 }
-                if started { Some(val) } else { None }
+                if started {
+                    Some(val)
+                } else {
+                    None
+                }
             }
 
             // Case 1: YYYY-MM-DD
@@ -361,21 +349,14 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                 // 2. 如果 candidate 距离今天超过 7 天且在未来（例如今天 3 月而日期是 11 月），
                 //    则视为“去年”的这个日期（二维码一般 7 天有效，不可能指向今年很久以后的日期）
                 if parts.len() == 2 {
-                    if let (Some(m), Some(d)) = (
-                        leading_int(parts[0]),
-                        leading_int(parts[1]),
-                    ) {
+                    if let (Some(m), Some(d)) = (leading_int(parts[0]), leading_int(parts[1])) {
                         let today = Utc::now().date_naive();
                         let mut year = today.year();
-                        if let Some(mut candidate) =
-                            NaiveDate::from_ymd_opt(year, m, d)
-                        {
+                        if let Some(mut candidate) = NaiveDate::from_ymd_opt(year, m, d) {
                             // 如果解析出的日期距离今天超过 7 天且在未来，认为是去年同一天
                             if candidate > today + Duration::days(7) {
                                 year -= 1;
-                                if let Some(prev) =
-                                    NaiveDate::from_ymd_opt(year, m, d)
-                                {
+                                if let Some(prev) = NaiveDate::from_ymd_opt(year, m, d) {
                                     candidate = prev;
                                 }
                             }
@@ -398,20 +379,13 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                 let month_part = s.split('月').next().unwrap_or("");
                 let after_month = s.split('月').nth(1).unwrap_or("");
                 let day_part = after_month.split('日').next().unwrap_or("");
-                if let (Some(m), Some(d)) = (
-                    leading_int(month_part),
-                    leading_int(day_part),
-                ) {
+                if let (Some(m), Some(d)) = (leading_int(month_part), leading_int(day_part)) {
                     let today = Utc::now().date_naive();
                     let mut year = today.year();
-                    if let Some(mut candidate) =
-                        NaiveDate::from_ymd_opt(year, m, d)
-                    {
+                    if let Some(mut candidate) = NaiveDate::from_ymd_opt(year, m, d) {
                         if candidate > today + Duration::days(7) {
                             year -= 1;
-                            if let Some(prev) =
-                                NaiveDate::from_ymd_opt(year, m, d)
-                            {
+                            if let Some(prev) = NaiveDate::from_ymd_opt(year, m, d) {
                                 candidate = prev;
                             }
                         }
@@ -492,6 +466,7 @@ async fn load_model_config() -> Result<Option<ModelConfig>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             if let Ok(dir) = app.path().app_data_dir() {
