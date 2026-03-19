@@ -14,7 +14,6 @@ export interface Project {
   name: string;
   qrTypeLabel: string;
   qrImage: string;
-  qrImageRemote?: string;
   qrUrl?: string | null;
   expireAt: string;
   expired: boolean | null;
@@ -132,7 +131,7 @@ export const ProjectDataTable = ({
                         type="button"
                         className="text-xs text-primary underline underline-offset-4 hover:text-primary/80"
                         onClick={() => {
-                          const src = project.qrImage || project.qrImageRemote;
+                          const src = project.qrImage;
                           if (!src) return;
                           setPreviewSrc(src);
                         }}

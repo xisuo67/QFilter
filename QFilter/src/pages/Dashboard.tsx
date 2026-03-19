@@ -23,7 +23,6 @@ import wechat from "@/assets/wechat.jpg";
 
 
 type QrRecord = Project & {
-  qrImageRemote: string;
   validQr: boolean;
   ocrStatus: "pending" | "done" | "failed";
   qrUrl?: string | null;
@@ -287,6 +286,41 @@ export function Dashboard() {
     });
   };
 
+  const renameQiniuFile = async (
+    fileName: string,
+    imageUrl: string,
+  ): Promise<string> => {
+    const renameResp = await fetch("https://wechatmanage.xisuo67.website/api/base/qiniuRename", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        fileName,
+        imageUrl,
+      }),
+    });
+
+    if (!renameResp.ok) {
+      throw new Error(`重命名服务错误: ${renameResp.status}`);
+    }
+
+    // 接口返回：
+    // { "code": 0, "data": { "url": "..." }, "msg": "重命名成功" }
+    const renameJson: {
+      code: number;
+      data?: { url?: string };
+      msg?: string;
+    } = await renameResp.json();
+
+    if (renameJson.code !== 0 || !renameJson.data?.url) {
+      throw new Error(`重命名失败: ${renameJson.msg || "未知错误"}`);
+    }
+
+    return renameJson.data.url;
+  };
+
   const handleUploaded = async ({ file, localUrl }: UploadedImagePayload) => {
     setShowUploadDialog(false);
 
@@ -310,7 +344,6 @@ export function Dashboard() {
             name: qrCheck.message || "无效二维码",
             qrTypeLabel: "",
             qrImage: localUrl,
-            qrImageRemote: "",
             expireAt: "",
             expired: null,
             validQr: false,
@@ -342,7 +375,6 @@ export function Dashboard() {
                       ? "飞书"
                       : "未知",
           qrImage: localUrl,
-          qrImageRemote: "",
           expireAt: "",
           expired: null,
           validQr: true,
@@ -354,7 +386,7 @@ export function Dashboard() {
 
       // 3. 异步执行七牛上传（因为ocr服务需要网络图片，所以只能先上传到七牛云） + OCR，完成后更新这条记录
       try {
-        //由于不想暴露私人密钥，通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
+        //通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
         const ossUrl = await uploadToQiniu(
           file,
           qrCheck.qr_type ?? "unknown",
@@ -374,7 +406,7 @@ export function Dashboard() {
               r.id === recordId
                 ? {
                     ...r,
-                    qrImageRemote: ossUrl,
+                    qrImage: ossUrl,
                     ocrStatus: "failed",
                   }
                 : r,
@@ -400,6 +432,13 @@ export function Dashboard() {
             expired = null;
           }
         }
+        // 根据图片名称 + 过期状态 + recordId 生成唯一文件名，并调用后端重命名接口
+        const baseName = (data.name || "").trim()
+          ? (data.name as string).replace(/[\\/:*?"<>|]/g, "_")
+          : recordId;
+        const uniqueName = `${baseName}_${expireAt || ""}_${recordId}`;
+
+        const renamedUrl = await renameQiniuFile(uniqueName, ossUrl);
 
         // OCR 成功：更新这条记录的名称/有效期/过期状态/远程地址/状态
         setRecords((prev) =>
@@ -408,7 +447,7 @@ export function Dashboard() {
               ? {
                   ...r,
                   name: data.name || r.name,
-                  qrImageRemote: ossUrl,
+                  qrImage: renamedUrl,
                   expireAt,
                   expired,
                   ocrStatus: "done",
@@ -433,7 +472,6 @@ export function Dashboard() {
           name: "识别失败",
           qrTypeLabel: "",
           qrImage: localUrl,
-          qrImageRemote: "",
           expireAt: "",
           expired: false,
           validQr: false,
