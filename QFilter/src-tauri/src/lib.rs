@@ -13,7 +13,7 @@ use std::{
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, NaiveDate, Duration, Utc};
 use tauri::Manager;
 use url::Url;
 
@@ -355,19 +355,45 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                     }
                 }
 
-                // Case 2: M-D / MM-DD (or with suffix like "03-09日前")
+                // Case 2: M-D / MM-DD（例如 03-09、3-9 或带“日前”等后缀）
+                // 规则：
+                // 1. 先假定年份为今年，得到 candidate = YYYY-MM-DD
+                // 2. 如果 candidate 距离今天超过 7 天且在未来（例如今天 3 月而日期是 11 月），
+                //    则视为“去年”的这个日期（二维码一般 7 天有效，不可能指向今年很久以后的日期）
                 if parts.len() == 2 {
                     if let (Some(m), Some(d)) = (
                         leading_int(parts[0]),
                         leading_int(parts[1]),
                     ) {
-                        let year = Utc::now().year();
-                        return Some(format!("{:04}-{:02}-{:02}", year, m, d));
+                        let today = Utc::now().date_naive();
+                        let mut year = today.year();
+                        if let Some(mut candidate) =
+                            NaiveDate::from_ymd_opt(year, m, d)
+                        {
+                            // 如果解析出的日期距离今天超过 7 天且在未来，认为是去年同一天
+                            if candidate > today + Duration::days(7) {
+                                year -= 1;
+                                if let Some(prev) =
+                                    NaiveDate::from_ymd_opt(year, m, d)
+                                {
+                                    candidate = prev;
+                                }
+                            }
+                            return Some(format!(
+                                "{:04}-{:02}-{:02}",
+                                candidate.year(),
+                                candidate.month(),
+                                candidate.day()
+                            ));
+                        }
                     }
                 }
             }
 
-            // Case 3: M月D日 / MM月DD日 (or with suffix like "3月9日前")
+            // Case 3: M月D日 / MM月DD日（例如 3月9日、03月09日前）
+            // 处理逻辑与 Case 2 相同：
+            // - 先按今年拼出 YYYY-MM-DD
+            // - 如果比“今天 + 7 天”还晚，则回退 1 年，认为是去年的该日期
             if s.contains('月') && s.contains('日') {
                 let month_part = s.split('月').next().unwrap_or("");
                 let after_month = s.split('月').nth(1).unwrap_or("");
@@ -376,8 +402,26 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                     leading_int(month_part),
                     leading_int(day_part),
                 ) {
-                    let year = Utc::now().year();
-                    return Some(format!("{:04}-{:02}-{:02}", year, m, d));
+                    let today = Utc::now().date_naive();
+                    let mut year = today.year();
+                    if let Some(mut candidate) =
+                        NaiveDate::from_ymd_opt(year, m, d)
+                    {
+                        if candidate > today + Duration::days(7) {
+                            year -= 1;
+                            if let Some(prev) =
+                                NaiveDate::from_ymd_opt(year, m, d)
+                            {
+                                candidate = prev;
+                            }
+                        }
+                        return Some(format!(
+                            "{:04}-{:02}-{:02}",
+                            candidate.year(),
+                            candidate.month(),
+                            candidate.day()
+                        ));
+                    }
                 }
             }
 

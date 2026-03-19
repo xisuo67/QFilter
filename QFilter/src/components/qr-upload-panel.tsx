@@ -53,7 +53,13 @@ export function QrUploadPanel({
       setIsDragging(false);
 
       const file = e.dataTransfer.files?.[0];
-      if (file && file.type.startsWith("image/")) {
+      // 有些从系统拖拽进来的文件可能没有正确的 MIME type，这里同时按扩展名兜底判断
+      const isImageFile =
+        file &&
+        (file.type.startsWith("image/") ||
+          /\.(png|jpe?g|gif|bmp|webp)$/i.test(file.name));
+
+      if (file && isImageFile) {
         const fakeEvent = {
           target: {
             files: [file],
