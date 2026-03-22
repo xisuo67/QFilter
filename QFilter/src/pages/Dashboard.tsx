@@ -438,7 +438,7 @@ export function Dashboard() {
             expired = null;
           }
         }
-        // 根据图片名称 + 过期状态 + recordId 生成唯一文件名，并调用后端重命名接口
+        // 根据名称 + 过期时间 + recordId 生成唯一文件名，并调用后端重命名文件接口，避免因为图片名称过于简单，导致七牛云文件名重复，导致文件覆盖。
         const baseName = (data.name || "").trim()
           ? (data.name as string).replace(/[\\/:*?"<>|]/g, "_")
           : recordId;
