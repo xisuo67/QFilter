@@ -14,6 +14,10 @@ export interface SidebarLinkItem {
   label: string;
   id: string;
   icon?: ReactNode;
+  /** 为 true 时选中也不显示高亮背景（适合底部头像等） */
+  noActiveStyle?: boolean;
+  /** 桌面侧栏收起为窄条时，将图标在行内水平居中 */
+  centerWhenCollapsed?: boolean;
 }
 
 interface SidebarContextProps {
@@ -186,16 +190,26 @@ interface SidebarLinkProps {
 }
 
 export const SidebarLink = ({ item, className }: SidebarLinkProps) => {
-  const { open, animate, activeId, setActiveId } = useSidebar();
+  const { open, animate, activeId, setActiveId, setOpen } = useSidebar();
   const isActive = activeId === item.id;
+  const showActiveBg = isActive && !item.noActiveStyle;
+  const centerIconRow =
+    item.centerWhenCollapsed && animate && !open;
 
   return (
     <button
       type="button"
-      onClick={() => setActiveId(item.id)}
+      onClick={() => {
+        setActiveId(item.id);
+        // 移动端全屏侧栏：选中后收起
+        setOpen(false);
+      }}
       className={cn(
-        "flex items-center justify-start gap-2 group/sidebar py-2 rounded-md px-2 w-full text-left",
-        isActive
+        "flex items-center group/sidebar py-2 rounded-md w-full text-left",
+        centerIconRow
+          ? "justify-center gap-0 px-0"
+          : "justify-start gap-2 px-2",
+        showActiveBg
           ? "bg-neutral-200 dark:bg-neutral-700"
           : "hover:bg-neutral-200/60 dark:hover:bg-neutral-700/60",
         className,

@@ -9,8 +9,9 @@ import { useTranslation } from "react-i18next";
 import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
 import { Dashboard } from "@/pages/Dashboard";
 import { Settings } from "@/pages/Settings";
+import { About } from "@/pages/About";
 
-type TabId = "dashboard" | "settings";
+type TabId = "dashboard" | "settings" | "about";
 type Theme = "light" | "dark";
 
 function App() {
@@ -69,7 +70,7 @@ function App() {
           setActiveId={(id) => setActiveTab(id as TabId)}
         >
           <SidebarBody className="justify-between gap-8">
-            <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
               <div className="flex items-center gap-2 px-1 py-1">
                 <div className="h-6 w-6 rounded-lg bg-black dark:bg-white" />
                 <span className="text-sm font-semibold">{t("appName")}</span>
@@ -108,11 +109,37 @@ function App() {
                 ))}
               </div>
             </div>
+            <div className="mt-auto shrink-0 border-t border-neutral-200/80 pt-3 dark:border-neutral-600/80">
+              <SidebarLink
+                item={{
+                  id: "about",
+                  label: t("menu.about"),
+                  noActiveStyle: true,
+                  centerWhenCollapsed: true,
+                  icon: (
+                    <span
+                      className="inline-flex h-7 w-7 shrink-0 overflow-hidden rounded-full ring-1 ring-neutral-300 dark:ring-neutral-600"
+                      aria-hidden
+                    >
+                      <img
+                        src="https://cdnqiniu.xisuo67.website/1771816659132"
+                        alt=""
+                        className="block h-full w-full object-cover"
+                        width={28}
+                        height={28}
+                        decoding="async"
+                      />
+                    </span>
+                  ),
+                }}
+              />
+            </div>
           </SidebarBody>
         </Sidebar>
         <main className="flex-1 flex">
           {activeTab === "dashboard" && <Dashboard />}
           {activeTab === "settings" && <Settings />}
+          {activeTab === "about" && <About />}
         </main>
       </div>
     </div>

@@ -16,6 +16,14 @@ void i18n
           menu: {
             dashboard: "快筛",
             settings: "设置",
+            about: "关于作者",
+          },
+          about: {
+            title: "关于 QFilter",
+            intro:
+              "群聊二维码快速筛选工具：校验二维码、上传云端、识别有效期并管理结果。本页为关于与说明，可在文案中补充项目介绍、使用条款或联系方式。",
+            versionLabel: "版本信息见应用发布说明。",
+            credits: "感谢使用。",
           },
           dashboard: {
             title: "快筛",
@@ -39,6 +47,14 @@ void i18n
           menu: {
             dashboard: "Dashboard",
             settings: "Settings",
+            about: "About Author",
+          },
+          about: {
+            title: "About QFilter",
+            intro:
+              "A quick filter for group QR codes: validate, upload, OCR expiry, and manage results. Use this page for app info, terms, or contact details.",
+            versionLabel: "See release notes for version details.",
+            credits: "Thanks for using QFilter.",
           },
           dashboard: {
             title: "Dashboard",
