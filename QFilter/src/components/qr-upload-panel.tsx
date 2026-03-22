@@ -10,6 +10,17 @@ import { cn } from "@/lib/utils";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { readFile } from "@tauri-apps/plugin-fs";
 
+/** 仅在 Tauri WebView 内为 true；纯浏览器打开 Vite 开发页时为 false */
+function isTauriWebview(): boolean {
+  if (typeof window === "undefined") return false;
+  const internals = (
+    window as unknown as {
+      __TAURI_INTERNALS__?: { metadata?: { currentWebview?: { label?: string } } };
+    }
+  ).__TAURI_INTERNALS__;
+  return Boolean(internals?.metadata?.currentWebview?.label);
+}
+
 interface QrUploadPanelProps {
   onUploaded?: (payload: UploadedImagePayload) => void;
   className?: string;
@@ -75,7 +86,16 @@ export function QrUploadPanel({
 
   // 使用 Tauri WebviewWindow 的拖拽事件，支持从系统窗口直接拖拽到应用中任意位置
   useEffect(() => {
-    const appWindow = getCurrentWebviewWindow();
+    if (!isTauriWebview()) {
+      return;
+    }
+
+    let appWindow: ReturnType<typeof getCurrentWebviewWindow>;
+    try {
+      appWindow = getCurrentWebviewWindow();
+    } catch {
+      return;
+    }
 
     const unlistenPromise = appWindow.onDragDropEvent(async (event) => {
       const payload = event.payload as {

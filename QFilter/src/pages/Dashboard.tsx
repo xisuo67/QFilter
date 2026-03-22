@@ -20,7 +20,7 @@ import {
 import { motion } from "framer-motion";
 import wechatBg from "@/assets/wechat_bg.jpg";
 import wechat from "@/assets/wechat.jpg";
-
+import { MorphingSquare } from "@/components/morphing-square";
 
 type QrRecord = Project & {
   validQr: boolean;
@@ -175,6 +175,8 @@ export function Dashboard() {
     "all" | "expired" | "active" | "unknown"
   >("all");
   const [expiredSort, setExpiredSort] = useState<"none" | "asc" | "desc">("none");
+  const [uploadProcessing, setUploadProcessing] = useState(false);
+  const [uploadProcessingMessage, setUploadProcessingMessage] = useState("");
 
   const tableHeaders: { key: keyof Project; label: string }[] = [
     { key: "name", label: t("dashboard.name", "名称") },
@@ -323,6 +325,8 @@ export function Dashboard() {
 
   const handleUploaded = async ({ file, localUrl }: UploadedImagePayload) => {
     setShowUploadDialog(false);
+    setUploadProcessing(true);
+    setUploadProcessingMessage("正在校验二维码…");
 
     try {
       // 1. 先把本地文件读成字节数组，发给后端 Rust 用 rxing 识别二维码并校验域名
@@ -386,12 +390,14 @@ export function Dashboard() {
 
       // 3. 异步执行七牛上传（因为ocr服务需要网络图片，所以只能先上传到七牛云） + OCR，完成后更新这条记录
       try {
+        setUploadProcessingMessage("正在上传到云端…");
         //通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
         const ossUrl = await uploadToQiniu(
           file,
           qrCheck.qr_type ?? "unknown",
         );
 
+        setUploadProcessingMessage("正在识别有效期…");
         const data = await invoke<{
           success: boolean;
           message?: string;
@@ -438,6 +444,7 @@ export function Dashboard() {
           : recordId;
         const uniqueName = `${baseName}_${expireAt || ""}_${recordId}`;
 
+        setUploadProcessingMessage("正在保存文件…");
         const renamedUrl = await renameQiniuFile(uniqueName, ossUrl);
 
         // OCR 成功：更新这条记录的名称/有效期/过期状态/远程地址/状态
@@ -478,6 +485,9 @@ export function Dashboard() {
           ocrStatus: "failed",
         } as QrRecord,
       ]);
+    } finally {
+      setUploadProcessing(false);
+      setUploadProcessingMessage("");
     }
   };
 
@@ -659,6 +669,23 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      {uploadProcessing && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 backdrop-blur-[2px]"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex flex-col items-center gap-3 max-w-sm mx-4 px-4 text-center text-neutral-100">
+            <MorphingSquare
+              message={uploadProcessingMessage || "处理中…"}
+              messagePlacement="bottom"
+              className="bg-primary"
+            />
+          </div>
+        </div>
+      )}
 
       {showUploadDialog && (
         <div
