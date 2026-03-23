@@ -2,14 +2,13 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Settings as SettingsIcon,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar";
 import { Dashboard } from "@/pages/Dashboard";
 import { Settings } from "@/pages/Settings";
 import { About } from "@/pages/About";
+import { AnimatedThemeToggle } from "@/components/animated-theme-toggle";
 
 type TabId = "dashboard" | "settings" | "about";
 type Theme = "light" | "dark";
@@ -74,18 +73,12 @@ function App() {
               <div className="flex items-center gap-2 px-1 py-1">
                 <span className="text-sm font-semibold">{t("appName")}</span>
                 <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
-                    aria-label={theme === "dark" ? t("theme.light") : t("theme.dark")}
-                  >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4" />
-                    ) : (
-                      <Moon className="h-4 w-4" />
-                    )}
-                  </button>
+                  <AnimatedThemeToggle
+                    isDark={theme === "dark"}
+                    onToggle={toggleTheme}
+                    ariaLabel={theme === "dark" ? t("theme.light") : t("theme.dark")}
+                    className="h-7 w-7"
+                  />
                   <button
                     type="button"
                     className="text-xs px-2 py-1 rounded border border-neutral-300 bg-white hover:bg-neutral-100"
