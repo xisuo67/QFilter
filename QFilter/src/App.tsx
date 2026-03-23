@@ -72,7 +72,6 @@ function App() {
           <SidebarBody className="justify-between gap-8">
             <div className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
               <div className="flex items-center gap-2 px-1 py-1">
-                <div className="h-6 w-6 rounded-lg bg-black dark:bg-white" />
                 <span className="text-sm font-semibold">{t("appName")}</span>
                 <div className="ml-auto flex items-center gap-2">
                   <button
