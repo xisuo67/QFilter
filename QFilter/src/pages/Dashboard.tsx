@@ -7,7 +7,10 @@ import {
 } from "@/components/data-table/project-data-table";
 import { Button as UploadButton } from "@/components/uoload/button";
 import type { UploadedImagePayload } from "@/components/uoload/use-image-upload";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { useToasts } from "@/components/ui/toast";
 import * as qiniu from "qiniu-js";
 import {
   Modal,
@@ -20,6 +23,7 @@ import {
 import { motion } from "framer-motion";
 import wechatBg from "@/assets/wechat_bg.jpg";
 import wechat from "@/assets/wechat.jpg";
+import workWechat from "@/assets/workwechat.png";
 import { MorphingSquare } from "@/components/morphing-square";
 
 type QrRecord = Project & {
@@ -39,15 +43,15 @@ const allColumns: (keyof Project)[] = [
 ];
 
 interface ExportCsvFooterProps {
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
 }
 
 const ExportCsvFooter = ({ onConfirm }: ExportCsvFooterProps) => {
   const { setOpen } = useModal();
 
-  const handleConfirm = () => {
-    onConfirm();
+  const handleConfirm = async () => {
     setOpen(false);
+    await onConfirm();
   };
 
   return (
@@ -71,7 +75,7 @@ const ExportCsvFooter = ({ onConfirm }: ExportCsvFooterProps) => {
 };
 
 interface ExportCsvModalProps {
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   totalImages: number;
   totalValid: number;
   totalInvalid: number;
@@ -99,6 +103,7 @@ const ExportCsvModal = ({
           <div className="flex justify-center items-center">
             {[ wechatBg,
                wechat,
+               workWechat
             ].map((src, idx) => (
               <motion.div
                 key={"images" + idx}
@@ -166,6 +171,7 @@ const ExportCsvModal = ({
 
 export function Dashboard() {
   const { t } = useTranslation();
+  const { success, warning, error: toastError } = useToasts();
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [visibleColumns] = useState<Set<keyof Project>>(
     () => new Set(allColumns),
@@ -211,7 +217,7 @@ export function Dashboard() {
     return list;
   }, [records, expiredFilter, expiredSort]);
 
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
     const rows = filteredProjects.map((p) => ({
       name: p.name,
       qrImage: p.qrImage,
@@ -221,7 +227,7 @@ export function Dashboard() {
     }));
 
     const header = ["name", "qrImage", "expireAt", "expired"];
-    const csv = [
+    const csvBody = [
       header.join(","),
       ...rows.map((row) =>
         header
@@ -233,16 +239,43 @@ export function Dashboard() {
           .join(","),
       ),
     ].join("\r\n");
+    /** Excel 对 UTF-8 CSV 识别更稳 */
+    const csv = `\ufeff${csvBody}`;
+
+    const defaultBase = `qfilter-export-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    if (isTauri()) {
+      try {
+        const path = await save({
+          title: "导出 CSV",
+          defaultPath: defaultBase,
+          filters: [{ name: "CSV", extensions: ["csv"] }],
+        });
+        if (path === null) {
+          warning("已取消导出");
+          return;
+        }
+        await writeTextFile(path, csv);
+        success(`已保存：${path}`);
+      } catch (e) {
+        console.error("export csv", e);
+        toastError(
+          e instanceof Error ? `导出失败：${e.message}` : "导出失败，请稍后重试",
+        );
+      }
+      return;
+    }
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "qfilter-export.csv");
+    link.setAttribute("download", defaultBase);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    success("已开始下载 CSV");
   };
 
   const uploadToQiniu = async (file: File,qr_type: string): Promise<string> => {
