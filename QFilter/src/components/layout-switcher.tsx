@@ -7,12 +7,11 @@ import {
 import {
   Playlist01Icon,
   GridViewIcon,
-  StarIcon,
   Ticket01Icon,
-  Camera01Icon,
-  BrushIcon,
+  WechatIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { AlipayBrandIcon } from "@/components/icons/alipay-brand-icon";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,30 +20,38 @@ interface CollectionItem {
   id: string;
   title: string;
   subtitle: string;
-  idNumber: string;
+  description: string;
   image: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  icon: any;
+  icon: IconSvgElement;
 }
 
 const ITEMS: CollectionItem[] = [
   {
     id: "1",
     title: "支付宝",
-    subtitle: "支持我",
-    idNumber: "209",
+    subtitle: "捐赠任意金额",
+    description: "支付宝扫码",
     image:
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=400&h=400&auto=format&fit=crop",
-    icon: Camera01Icon,
+      "https://cdnqiniu.xisuo67.website/payQrCode/xisuo67/aliPay.png",
+    icon: AlipayBrandIcon,
   },
   {
     id: "2",
     title: "微信",
-    subtitle: "支持我",
-    idNumber: "808",
+    subtitle: "捐赠任意金额",
+    description: "微信扫码",
     image:
-      "https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=400&h=400&auto=format&fit=crop",
-    icon: BrushIcon,
+      "https://cdnqiniu.xisuo67.website/payQrCode/xisuo67/wechatPay.png",
+    icon: WechatIcon,
+  },
+  {
+    id: "3",
+    title: "人脉群",
+    subtitle: "获取微信群、企业微信、个人二维码、发布群二维码平台",
+    description: "微信扫码",
+    image:
+      "https://cdnqiniu.xisuo67.website/common/groupchat_website.png",
+    icon: WechatIcon,
   },
 ];
 
@@ -202,12 +209,12 @@ export function LayoutSwitcher() {
                           layout
                           className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/5 text-primary text-[10px] font-bold shrink-0 ml-2"
                         >
-                          <HugeiconsIcon
+                          {/* <HugeiconsIcon
                             icon={StarIcon}
                             size={10}
                             className="text-yellow-500 fill-yellow-500"
-                          />
-                          <span>#{item.idNumber}</span>
+                          /> */}
+                          <span>{item.description}</span>
                         </motion.div>
                       </motion.div>
                     )}
