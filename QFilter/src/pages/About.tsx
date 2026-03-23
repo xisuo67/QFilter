@@ -1,8 +1,14 @@
+import { useState } from "react";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { useTranslation } from "react-i18next";
 import { LayoutSwitcher } from "@/components/layout-switcher";
+import { useToasts } from "@/components/ui/toast";
 
 export function About() {
   const { t } = useTranslation();
+  const { success, error } = useToasts();
+  const [busy, setBusy] = useState(false);
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
@@ -16,7 +22,37 @@ export function About() {
           </p>
         </div>
 
-        <div className="w-full flex justify-center border-t border-border/60">
+        <div className="shrink-0 flex items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                const update = await check();
+                if (!update) {
+                  success(t("about.upToDate"));
+                  return;
+                }
+
+                await update.downloadAndInstall();
+                success(t("about.updating"));
+                await relaunch();
+              } catch (e) {
+                console.error(e);
+                error(t("about.updateFailed"));
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+          >
+            {busy ? t("about.checkingUpdates") : t("about.checkUpdates")}
+          </button>
+        </div>
+
+        <div className="w-full flex justify-center border-t border-border/60 pt-6">
           <LayoutSwitcher />
         </div>
       </div>

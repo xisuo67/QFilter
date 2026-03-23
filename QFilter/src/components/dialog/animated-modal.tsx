@@ -78,7 +78,7 @@ export const ModalBody = ({
   }, [open]);
 
   // 和原始 demo 一致：ref 指向 div，用于外部点击检测
-  const modalRef = useRef<HTMLDivElement | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null!);
   useOutsideClick(modalRef, () => setOpen(false));
 
   // Esc 键关闭模态框
