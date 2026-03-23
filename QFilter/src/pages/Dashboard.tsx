@@ -423,7 +423,6 @@ export function Dashboard() {
 
       // 3. 异步执行七牛上传（因为ocr服务需要网络图片，所以只能先上传到七牛云） + OCR，完成后更新这条记录
       try {
-        setUploadProcessingMessage("正在上传到云端…");
         //通过接口获取临时上传凭证；上传图片到七牛云；返回图片的网络地址
         const ossUrl = await uploadToQiniu(
           file,
