@@ -28,6 +28,59 @@ struct ModelConfig {
     prompt: String,
 }
 
+const DEFAULT_PROMPT: &str = r#"你是二维码页面信息结构化提取助手。
+
+必须严格按步骤执行。
+
+--------------------------------
+第一步：提取有效期
+
+有效期通常位于二维码下方,图片底部的灰色小字区域。
+
+请重点检查二维码下方,图片底部的灰色小字区域的文字。
+
+1. 读取图片全部文字（包括灰色小字）。
+2. 查找包含“7天内”“七天内”“有效”“前”“截止”等关键词的句子。
+3. 在该句中查找括号日期，格式可能为：
+   (X月X日前)
+   （X月X日前）
+   (X月X日)
+   （X月X日）
+
+4. 如果存在括号日期：
+   - 提取 X月X日
+   - 去除“前”
+   - 必须转换为 MM-DD 格式
+   - 如果无法转换为 MM-DD，则 expire = null
+
+5. 如果没有括号日期：
+   expire = null
+
+⚠️ expire 字段最终必须是 MM-DD 格式或 null
+⚠️ 不允许输出 “3月9日前” 这种格式
+⚠️ 不允许根据7天自行推算
+
+--------------------------------
+第二步：提取名称
+
+1. 识别二维码上方最大字号标题文本。
+2. 如果标题包含以下前缀，必须删除前缀后再输出：
+   - 群聊:
+   - 群聊：
+3. 输出的 name 字段不得包含：
+   - “群聊”
+   - 冒号 “:” 或 “：” 开头形式
+4. 只输出真实名称本身。
+5. 不得包含任何前缀或说明性文字。
+
+--------------------------------
+仅返回 JSON：
+
+{
+  "name": "",
+  "expire": ""
+}"#;
+
 #[derive(Debug, Serialize)]
 struct ValidateQrResult {
     valid: bool,
@@ -455,12 +508,61 @@ async fn load_model_config() -> Result<Option<ModelConfig>, String> {
     .await
     .map_err(|e| format!("db read error: {}", e))?;
 
-    Ok(row.map(|r| ModelConfig {
-        api_url: r.get("api_url"),
-        model_name: r.get("model_name"),
-        api_key: r.get("api_key"),
-        prompt: r.get("prompt"),
-    }))
+    if let Some(r) = row {
+        let mut config = ModelConfig {
+            api_url: r.get("api_url"),
+            model_name: r.get("model_name"),
+            api_key: r.get("api_key"),
+            prompt: r.get("prompt"),
+        };
+
+        // 兼容历史空 prompt：自动回填并落库。
+        if config.prompt.trim().is_empty() {
+            config.prompt = DEFAULT_PROMPT.to_string();
+            sqlx::query::<Sqlite>(
+                r#"
+                UPDATE model_settings
+                SET prompt = ?
+                WHERE id = 1
+                "#,
+            )
+            .bind(&config.prompt)
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("db write error: {}", e))?;
+        }
+
+        return Ok(Some(config));
+    }
+
+    // 首次启动无记录时，直接写入默认提示词到表。
+    let config = ModelConfig {
+        api_url: String::new(),
+        model_name: String::new(),
+        api_key: String::new(),
+        prompt: DEFAULT_PROMPT.to_string(),
+    };
+
+    sqlx::query::<Sqlite>(
+        r#"
+        INSERT INTO model_settings (id, api_url, model_name, api_key, prompt)
+        VALUES (1, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            api_url = excluded.api_url,
+            model_name = excluded.model_name,
+            api_key = excluded.api_key,
+            prompt = excluded.prompt;
+        "#,
+    )
+    .bind(&config.api_url)
+    .bind(&config.model_name)
+    .bind(&config.api_key)
+    .bind(&config.prompt)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("db write error: {}", e))?;
+
+    Ok(Some(config))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
