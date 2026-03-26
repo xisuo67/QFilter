@@ -48,9 +48,18 @@ jobs:
         id: changelog
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#app-v}"
-          if [ -z "$VERSION" ]; then
-            echo "Unable to determine version from ref name: $GITHUB_REF_NAME" >&2
+          if [[ "${GITHUB_REF_NAME:-}" == app-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#app-v}"
+          else
+            if [ ! -f src-tauri/tauri.conf.json ]; then
+              echo "src-tauri/tauri.conf.json not found" >&2
+              exit 1
+            fi
+            VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "Unable to determine version (ref: ${GITHUB_REF_NAME:-<empty>})" >&2
             exit 1
           fi
           if [ ! -f CHANGELOG.md ]; then
