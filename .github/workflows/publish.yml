@@ -81,9 +81,10 @@ jobs:
             exit 1
           fi
 
-          echo "body<<'EOF'" >> "$GITHUB_OUTPUT"
+          DELIM="CHANGELOG_EOF_$(date +%s%N)"
+          echo "body<<$DELIM" >> "$GITHUB_OUTPUT"
           echo "$body" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "$DELIM" >> "$GITHUB_OUTPUT"
 
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
