@@ -44,6 +44,38 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Read changelog for this version
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#app-v}"
+          if [ -z "$VERSION" ]; then
+            echo "Unable to determine version from ref name: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md not found" >&2
+            exit 1
+          fi
+
+          # Extract section from "## VERSION" until next "## " heading (or EOF)
+          body="$(
+            awk -v ver="## " -v v="$VERSION" '
+              $0 ~ ("^##[[:space:]]+" v "([[:space:]]|$|\\()") { in=1; print; next }
+              in && $0 ~ /^##[[:space:]]+/ { exit }
+              in { print }
+            ' CHANGELOG.md
+          )"
+
+          if [ -z "$body" ]; then
+            echo "No changelog section found for version: $VERSION" >&2
+            exit 1
+          fi
+
+          echo "body<<'EOF'" >> "$GITHUB_OUTPUT"
+          echo "$body" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -51,7 +83,7 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: App v__VERSION__
-          releaseBody: See the assets to download this version and install.
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
