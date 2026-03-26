@@ -60,10 +60,10 @@ jobs:
 
           # Extract section from "## VERSION" until next "## " heading (or EOF)
           body="$(
-            awk -v ver="## " -v v="$VERSION" '
-              $0 ~ ("^##[[:space:]]+" v "([[:space:]]|$|\\()") { in=1; print; next }
-              in && $0 ~ /^##[[:space:]]+/ { exit }
-              in { print }
+            awk -v v="$VERSION" '
+              $0 ~ ("^##[[:space:]]+" v "([[:space:]]|$|\\()") { in_section=1; print; next }
+              in_section && $0 ~ /^##[[:space:]]+/ { exit }
+              in_section { print }
             ' CHANGELOG.md
           )"
 
