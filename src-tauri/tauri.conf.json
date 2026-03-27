@@ -35,7 +35,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCQzhENzJFMzQ3QUZGODEKUldTQi8zbzBMdGZJUzUvNmY4dGlObUM3YjdydkNOcjNBMG9DYjdac1NORGRPUm14VVl6d3VPOG0K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQwMTQxQjcxRjczNzIwNzAKUldSd0lEZjNjUnNVMEQvSlYrWnhSbmgwS204Ym92ZW5XbVliSDQ0NWQya2lITnRoRVlCRURDSEQK",
       "endpoints": [
         "https://github.com/xisuo67/QFilter/releases/latest/download/latest.json"
       ]

@@ -40,9 +40,9 @@ def main() -> int:
     if section is None:
         print(f"No changelog section found for version: {args.version}", file=sys.stderr)
         return 1
-    sys.stdout.write(section)
-    if not section.endswith("\n"):
-        sys.stdout.write("\n")
+    # GitHub Windows runners may default to cp1252; write UTF-8 bytes explicitly.
+    out = section if section.endswith("\n") else f"{section}\n"
+    sys.stdout.buffer.write(out.encode("utf-8"))
     return 0
 
 
