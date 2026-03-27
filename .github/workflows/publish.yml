@@ -87,11 +87,7 @@ jobs:
 
           # Extract section from "## VERSION" until next "## " heading (or EOF)
           body="$(
-            awk -v v="$VERSION" '
-              $0 ~ ("^##[[:space:]]+" v "([[:space:]]|$|\\()") { in_section=1; print; next }
-              in_section && $0 ~ /^##[[:space:]]+/ { exit }
-              in_section { print }
-            ' CHANGELOG.md
+            python scripts/extract_changelog_section.py CHANGELOG.md "$VERSION"
           )"
 
           if [ -z "$body" ]; then
