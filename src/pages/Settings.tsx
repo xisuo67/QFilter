@@ -10,6 +10,21 @@ interface ModelConfig {
   prompt: string;
 }
 
+interface OfflineOcrModel {
+  id: string;
+  name: string;
+  description: string;
+  size_mb: number;
+  download_url: string;
+  archive_path: string;
+  downloaded: boolean;
+}
+
+interface OfflineOcrSettings {
+  enabled: boolean;
+  selected_model_id: string | null;
+}
+
 const DEFAULT_PROMPT = `你是二维码页面信息结构化提取助手。
 
 必须严格按步骤执行。
@@ -65,7 +80,8 @@ const DEFAULT_PROMPT = `你是二维码页面信息结构化提取助手。
 
 export function Settings() {
   const { t } = useTranslation();
-  const { success, error } = useToasts();
+  const { success, error: toastError } = useToasts();
+  const [activeMenu, setActiveMenu] = useState<"online" | "offline">("online");
   const [form, setForm] = useState<ModelConfig>({
     api_url: "",
     model_name: "",
@@ -73,6 +89,16 @@ export function Settings() {
     prompt: "",
   });
   const [saving, setSaving] = useState(false);
+  const [offlineModels, setOfflineModels] = useState<OfflineOcrModel[]>([]);
+  const [offlineEnabled, setOfflineEnabled] = useState(false);
+  const [selectedOfflineModelId, setSelectedOfflineModelId] = useState<
+    string | null
+  >(null);
+  const [offlineLoading, setOfflineLoading] = useState(true);
+  const [offlineSaving, setOfflineSaving] = useState(false);
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     void (async () => {
@@ -83,14 +109,36 @@ export function Settings() {
         if (existing) {
           setForm(existing);
         }
-      } catch (error: any) {
-        console.error("load_model_config error", error);
-        error(
+      } catch (err: any) {
+        console.error("load_model_config error", err);
+        toastError(
           t("settings.loadError", "加载本地配置失败，请稍后重试。"),
         );
       }
     })();
-  }, [t, success, error]);
+  }, [t, toastError]);
+
+  useEffect(() => {
+    void (async () => {
+      setOfflineLoading(true);
+      try {
+        const [models, settings] = await Promise.all([
+          invoke<OfflineOcrModel[]>("list_offline_ocr_models"),
+          invoke<OfflineOcrSettings>("load_offline_ocr_settings"),
+        ]);
+        setOfflineModels(models);
+        setOfflineEnabled(settings.enabled);
+        setSelectedOfflineModelId(settings.selected_model_id ?? null);
+      } catch (err) {
+        console.error("load offline ocr settings error", err);
+        toastError(
+          t("settings.offline.loadError", "加载离线 OCR 设置失败，请稍后重试。"),
+        );
+      } finally {
+        setOfflineLoading(false);
+      }
+    })();
+  }, [t, toastError]);
 
   const handleChange = (field: keyof ModelConfig, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -102,11 +150,48 @@ export function Settings() {
     try {
       await invoke("save_model_config", { config: form });
       success(t("settings.saveSuccess", "保存成功"));
-    } catch (error: any) {
-      console.error("save_model_config error", error);
-      error(t("settings.saveError", "保存失败，请稍后重试"));
+    } catch (err: any) {
+      console.error("save_model_config error", err);
+      toastError(t("settings.saveError", "保存失败，请稍后重试"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadModel = async (modelId: string) => {
+    setDownloadingModelId(modelId);
+    try {
+      await invoke("download_offline_ocr_model", { modelId });
+      const refreshed = await invoke<OfflineOcrModel[]>("list_offline_ocr_models");
+      setOfflineModels(refreshed);
+      success(t("settings.offline.downloadSuccess", "模型下载完成"));
+    } catch (err) {
+      console.error("download_offline_ocr_model error", err);
+      toastError(
+        t("settings.offline.downloadError", "模型下载失败，请稍后重试。"),
+      );
+    } finally {
+      setDownloadingModelId(null);
+    }
+  };
+
+  const handleSaveOfflineSettings = async () => {
+    setOfflineSaving(true);
+    try {
+      await invoke("save_offline_ocr_settings", {
+        enabled: offlineEnabled,
+        selectedModelId: selectedOfflineModelId,
+      });
+      success(
+        t("settings.offline.saveSuccess", "离线 OCR 设置已保存"),
+      );
+    } catch (err) {
+      console.error("save_offline_ocr_settings error", err);
+      toastError(
+        t("settings.offline.saveError", "保存离线 OCR 设置失败，请稍后重试。"),
+      );
+    } finally {
+      setOfflineSaving(false);
     }
   };
 
@@ -119,7 +204,33 @@ export function Settings() {
         <p className="text-sm text-neutral-600 dark:text-neutral-300">
           {t("settings.intro")}
         </p>
-        <form onSubmit={handleSubmit} className="grid gap-4 max-w-xl">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveMenu("online")}
+            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm ${
+              activeMenu === "online"
+                ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            }`}
+          >
+            {t("settings.menu.online", "在线模型")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMenu("offline")}
+            className={`inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-sm ${
+              activeMenu === "offline"
+                ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+            }`}
+          >
+            {t("settings.menu.offline", "离线 OCR")}
+          </button>
+        </div>
+
+        {activeMenu === "online" ? (
+          <form onSubmit={handleSubmit} className="grid gap-4 max-w-xl">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-neutral-700 dark:text-neutral-200">
               {t("settings.apiUrlLabel", "模型接口地址")}
@@ -205,7 +316,96 @@ export function Settings() {
                 : t("settings.save", "保存")}
             </button>
           </div>
-        </form>
+          </form>
+        ) : (
+          <div className="grid gap-4 max-w-3xl">
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-200">
+              {t(
+                "settings.offline.hint",
+                "下载模型后可启用离线 OCR。当前仅下载模型文件，后续可接入本地推理引擎。",
+              )}
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-neutral-800 dark:text-neutral-100">
+              <input
+                type="checkbox"
+                checked={offlineEnabled}
+                onChange={(e) => setOfflineEnabled(e.target.checked)}
+              />
+              {t("settings.offline.enable", "启用离线 OCR")}
+            </label>
+
+            {offlineLoading ? (
+              <div className="text-sm text-neutral-500 dark:text-neutral-400">
+                {t("settings.offline.loading", "正在加载模型列表…")}
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {offlineModels.map((model) => (
+                  <div
+                    key={model.id}
+                    className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-800"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                          {model.name}
+                        </h3>
+                        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+                          {model.description}
+                        </p>
+                        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                          {t("settings.offline.size", "体积")} ~{model.size_mb}MB
+                        </p>
+                        <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 break-all">
+                          {model.archive_path}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={downloadingModelId === model.id}
+                        onClick={() => void handleDownloadModel(model.id)}
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-neutral-300 bg-white px-3 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-700"
+                      >
+                        {downloadingModelId === model.id
+                          ? t("settings.offline.downloading", "下载中…")
+                          : model.downloaded
+                            ? t("settings.offline.redownload", "重新下载")
+                            : t("settings.offline.download", "下载")}
+                      </button>
+                    </div>
+
+                    <label className="mt-3 inline-flex items-center gap-2 text-xs text-neutral-700 dark:text-neutral-200">
+                      <input
+                        type="radio"
+                        name="offline-model"
+                        disabled={!model.downloaded}
+                        checked={selectedOfflineModelId === model.id}
+                        onChange={() => setSelectedOfflineModelId(model.id)}
+                      />
+                      {model.downloaded
+                        ? t("settings.offline.useModel", "使用该模型")
+                        : t("settings.offline.downloadFirst", "请先下载后再选择")}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={offlineSaving}
+                onClick={() => void handleSaveOfflineSettings()}
+                className="inline-flex items-center justify-center rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+              >
+                {offlineSaving
+                  ? t("settings.saving", "保存中…")
+                  : t("settings.save", "保存")}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

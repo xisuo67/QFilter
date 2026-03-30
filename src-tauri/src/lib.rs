@@ -9,6 +9,7 @@ use sqlx::{
     Pool, Row, Sqlite,
 };
 use std::{
+    fs,
     path::PathBuf,
     str::FromStr,
     sync::OnceLock,
@@ -251,6 +252,195 @@ struct OcrResult {
     message: Option<String>,
     name: Option<String>,
     expire: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct OfflineOcrModel {
+    id: String,
+    name: String,
+    description: String,
+    size_mb: u32,
+    download_url: String,
+    archive_path: String,
+    downloaded: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct OfflineOcrSettings {
+    enabled: bool,
+    selected_model_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct OfflineOcrCatalogItem {
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    size_mb: u32,
+    download_url: &'static str,
+    archive_name: &'static str,
+}
+
+const OFFLINE_OCR_MODELS: &[OfflineOcrCatalogItem] = &[
+    OfflineOcrCatalogItem {
+        id: "ch_ppocr_v5_mobile_det",
+        name: "PP-OCRv5 Mobile Det (中文)",
+        description: "轻量检测模型，适合离线场景。",
+        size_mb: 5,
+        download_url: "https://paddleocr.bj.bcebos.com/PP-OCRv5/chinese/ch_PP-OCRv5_mobile_det_infer.tar",
+        archive_name: "ch_PP-OCRv5_mobile_det_infer.tar",
+    },
+    OfflineOcrCatalogItem {
+        id: "ch_ppocr_v5_mobile_rec",
+        name: "PP-OCRv5 Mobile Rec (中文)",
+        description: "轻量识别模型，适合提取名称与日期。",
+        size_mb: 18,
+        download_url: "https://paddleocr.bj.bcebos.com/PP-OCRv5/chinese/ch_PP-OCRv5_mobile_rec_infer.tar",
+        archive_name: "ch_PP-OCRv5_mobile_rec_infer.tar",
+    },
+    OfflineOcrCatalogItem {
+        id: "ch_ppocr_mobile_cls_v2",
+        name: "PP-OCR Mobile CLS v2",
+        description: "可选方向分类模型，提升旋转文本稳定性。",
+        size_mb: 2,
+        download_url: "https://paddleocr.bj.bcebos.com/dygraph_v2.0/ch/ch_ppocr_mobile_v2.0_cls_infer.tar",
+        archive_name: "ch_ppocr_mobile_v2.0_cls_infer.tar",
+    },
+];
+
+fn offline_model_dir() -> Result<PathBuf, String> {
+    let app_dir = APP_DATA_DIR
+        .get()
+        .ok_or_else(|| "app data dir not set".to_string())?
+        .clone();
+    Ok(app_dir.join("offline-ocr").join("models"))
+}
+
+fn build_offline_model_entry(
+    model: &OfflineOcrCatalogItem,
+    base_dir: &std::path::Path,
+) -> OfflineOcrModel {
+    let archive_path = base_dir.join(model.archive_name);
+    OfflineOcrModel {
+        id: model.id.to_string(),
+        name: model.name.to_string(),
+        description: model.description.to_string(),
+        size_mb: model.size_mb,
+        download_url: model.download_url.to_string(),
+        archive_path: archive_path.to_string_lossy().to_string(),
+        downloaded: archive_path.exists(),
+    }
+}
+
+#[tauri::command]
+async fn list_offline_ocr_models() -> Result<Vec<OfflineOcrModel>, String> {
+    let dir = offline_model_dir()?;
+    fs::create_dir_all(&dir).map_err(|e| format!("create model dir failed: {e}"))?;
+    Ok(OFFLINE_OCR_MODELS
+        .iter()
+        .map(|item| build_offline_model_entry(item, &dir))
+        .collect())
+}
+
+#[tauri::command]
+async fn download_offline_ocr_model(model_id: String) -> Result<OfflineOcrModel, String> {
+    let model = OFFLINE_OCR_MODELS
+        .iter()
+        .find(|item| item.id == model_id)
+        .ok_or_else(|| format!("unknown model id: {model_id}"))?
+        .clone();
+
+    let dir = offline_model_dir()?;
+    fs::create_dir_all(&dir).map_err(|e| format!("create model dir failed: {e}"))?;
+    let archive_path = dir.join(model.archive_name);
+
+    let response = reqwest::get(model.download_url)
+        .await
+        .map_err(|e| format!("download request failed: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "download failed with status: {}",
+            response.status()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("read download bytes failed: {e}"))?;
+    fs::write(&archive_path, &bytes).map_err(|e| format!("write file failed: {e}"))?;
+
+    Ok(build_offline_model_entry(&model, &dir))
+}
+
+#[tauri::command]
+async fn load_offline_ocr_settings() -> Result<OfflineOcrSettings, String> {
+    let pool = get_pool()
+        .await
+        .map_err(|e| format!("db init error: {}", e))?;
+
+    let row = sqlx::query(
+        r#"
+        SELECT enabled, selected_model_id
+        FROM offline_ocr_settings
+        WHERE id = 1
+        "#,
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("db read error: {}", e))?;
+
+    if let Some(r) = row {
+        let enabled_int: i64 = r.get("enabled");
+        let selected_model_id: Option<String> = r.get("selected_model_id");
+        return Ok(OfflineOcrSettings {
+            enabled: enabled_int != 0,
+            selected_model_id,
+        });
+    }
+
+    sqlx::query::<Sqlite>(
+        r#"
+        INSERT INTO offline_ocr_settings (id, enabled, selected_model_id)
+        VALUES (1, 0, NULL)
+        ON CONFLICT(id) DO NOTHING;
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("db write error: {}", e))?;
+
+    Ok(OfflineOcrSettings {
+        enabled: false,
+        selected_model_id: None,
+    })
+}
+
+#[tauri::command]
+async fn save_offline_ocr_settings(
+    enabled: bool,
+    selected_model_id: Option<String>,
+) -> Result<(), String> {
+    let pool = get_pool()
+        .await
+        .map_err(|e| format!("db init error: {}", e))?;
+
+    sqlx::query::<Sqlite>(
+        r#"
+        INSERT INTO offline_ocr_settings (id, enabled, selected_model_id)
+        VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            enabled = excluded.enabled,
+            selected_model_id = excluded.selected_model_id;
+        "#,
+    )
+    .bind(if enabled { 1_i64 } else { 0_i64 })
+    .bind(selected_model_id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("db write error: {}", e))?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -583,7 +773,11 @@ pub fn run() {
             save_model_config,
             load_model_config,
             validate_qr,
-            ocr_qr
+            ocr_qr,
+            list_offline_ocr_models,
+            download_offline_ocr_model,
+            load_offline_ocr_settings,
+            save_offline_ocr_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
