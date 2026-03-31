@@ -196,8 +196,8 @@ export function Settings() {
   };
 
   return (
-    <div className="flex flex-1">
-      <div className="p-4 md:p-8 rounded-tl-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col gap-4 flex-1 w-full h-full">
+    <div className="flex flex-1 min-h-0">
+      <div className="p-4 md:p-8 rounded-tl-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col gap-4 flex-1 w-full h-full min-h-0 overflow-hidden">
         <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-50">
           {t("settings.title")}
         </h1>
@@ -229,6 +229,7 @@ export function Settings() {
           </button>
         </div>
 
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
         {activeMenu === "online" ? (
           <form onSubmit={handleSubmit} className="grid gap-4 max-w-xl">
           <label className="flex flex-col gap-1 text-sm">
@@ -406,6 +407,7 @@ export function Settings() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
