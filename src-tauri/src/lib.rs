@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use base64::Engine as _;
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 use image::DynamicImage;
 use rxing::helpers;
@@ -16,6 +17,8 @@ use std::{
 };
 use tauri::Manager;
 use url::Url;
+
+mod ocr_curl_debug;
 
 static DB_POOL: OnceLock<Pool<Sqlite>> = OnceLock::new();
 static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -97,6 +100,19 @@ const ALLOWED_QR_HOST_SUFFIXES: &[(&str, &str)] = &[
     ("dingtalk.com", "dingtalk"),
     ("feishu.cn", "feishu"),
 ];
+
+fn should_use_base64_image(api_url: &str) -> bool {
+    if let Ok(parsed) = Url::parse(api_url) {
+        if let Some(host) = parsed.host_str() {
+            let is_local = host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1";
+            if is_local {
+                // Ollama 默认监听 11434，且本地 /v1 接口目前不支持外链 image_url。
+                return parsed.port_or_known_default().unwrap_or(80) == 11434;
+            }
+        }
+    }
+    false
+}
 
 fn parse_qr_url_type(raw_url: &str) -> Option<String> {
     let trimmed = raw_url.trim();
@@ -284,6 +300,31 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
 
     let client = reqwest::Client::new();
 
+    let image_payload_url = if should_use_base64_image(&config.api_url) {
+        let img_resp = client
+            .get(&image_url)
+            .send()
+            .await
+            .map_err(|e| format!("下载 OCR 图片失败: {e}"))?;
+        if !img_resp.status().is_success() {
+            return Err(format!("下载 OCR 图片失败，状态码: {}", img_resp.status()));
+        }
+        let mime = img_resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("image/jpeg")
+            .to_string();
+        let img_bytes = img_resp
+            .bytes()
+            .await
+            .map_err(|e| format!("读取 OCR 图片失败: {e}"))?;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&img_bytes);
+        format!("data:{mime};base64,{encoded}")
+    } else {
+        image_url.clone()
+    };
+
     let body = serde_json::json!({
         "model": config.model_name,
         "messages": [
@@ -293,7 +334,7 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": image_url,
+                            "url": image_payload_url,
                             "min_pixels": 3072,
                             "max_pixels": 8_388_608
                         }
@@ -317,7 +358,28 @@ async fn ocr_qr(image_url: String) -> Result<OcrResult, String> {
         .map_err(|e| format!("调用 OCR 接口失败: {e}"))?;
 
     if !resp.status().is_success() {
-        return Err(format!("OCR 服务返回错误状态码: {}", resp.status()));
+        let status = resp.status();
+        let err_text = resp
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("(读取错误响应体失败: {e})"));
+        let body_compact = serde_json::to_string(&body)
+            .unwrap_or_else(|e| format!("{{\"error\":\"serialize body: {e}\"}}"));
+        let auth_header_value = format!("Bearer {}", config.api_key);
+        let curl = ocr_curl_debug::ocr_error_curl_hint(
+            &config.api_url,
+            &auth_header_value,
+            &body_compact,
+        );
+        let preview: String = err_text.chars().take(4000).collect();
+        eprintln!(
+            "[ocr_qr] HTTP {}\n--- response body (truncated to 4000 chars) ---\n{}\n--- reproduce (bash; 含密钥，勿分享日志) ---\n{}\n",
+            status, preview, curl
+        );
+        return Err(format!(
+            "OCR 服务返回错误状态码: {}。已在终端输出 curl 与响应体，便于本地复现。",
+            status
+        ));
     }
 
     // DashScope 兼容 OpenAI，假设 content 里是模型输出的 JSON 字符串

@@ -3732,6 +3732,7 @@ name = "qfilter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "image 0.24.9",
  "reqwest 0.12.28",

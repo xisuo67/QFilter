@@ -65,7 +65,8 @@ const DEFAULT_PROMPT = `你是二维码页面信息结构化提取助手。
 
 export function Settings() {
   const { t } = useTranslation();
-  const { success, error } = useToasts();
+  /** 勿命名为 error，避免与 catch (error) 同名遮蔽导致 toast 无法调用 */
+  const { success, error: toastError } = useToasts();
   const [form, setForm] = useState<ModelConfig>({
     api_url: "",
     model_name: "",
@@ -83,14 +84,14 @@ export function Settings() {
         if (existing) {
           setForm(existing);
         }
-      } catch (error: any) {
-        console.error("load_model_config error", error);
-        error(
+      } catch (err: unknown) {
+        console.error("load_model_config error", err);
+        toastError(
           t("settings.loadError", "加载本地配置失败，请稍后重试。"),
         );
       }
     })();
-  }, [t, success, error]);
+  }, [t, toastError]);
 
   const handleChange = (field: keyof ModelConfig, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -102,9 +103,13 @@ export function Settings() {
     try {
       await invoke("save_model_config", { config: form });
       success(t("settings.saveSuccess", "保存成功"));
-    } catch (error: any) {
-      console.error("save_model_config error", error);
-      error(t("settings.saveError", "保存失败，请稍后重试"));
+    } catch (err: unknown) {
+      console.error("save_model_config error", err);
+      const msg =
+        err instanceof Error
+          ? `${t("settings.saveError", "保存失败，请稍后重试")}：${err.message}`
+          : t("settings.saveError", "保存失败，请稍后重试");
+      toastError(msg);
     } finally {
       setSaving(false);
     }
